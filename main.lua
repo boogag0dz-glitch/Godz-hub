@@ -1,204 +1,164 @@
---// LOAD RAYFIELD
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+--// LOAD RAYFIELD SAFE
+local success, Rayfield = pcall(function()
+    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
+
+if not success then
+    warn("Rayfield failed")
+    return
+end
 
 --// WINDOW
 local Window = Rayfield:CreateWindow({
    Name = "Godz Hub V2",
    LoadingTitle = "Godz Hub",
-   LoadingSubtitle = "Final Build",
+   LoadingSubtitle = "Loaded",
    ConfigurationSaving = {
       Enabled = true,
       FolderName = "GodzHub",
       FileName = "Config"
-   },
-   KeySystem = false
+   }
 })
 
--- KEYBIND
-local UIS = game:GetService("UserInputService")
-UIS.InputBegan:Connect(function(i,g)
-    if i.KeyCode == Enum.KeyCode.M then
-        Rayfield:Toggle()
-    end
-end)
+--// TABS
+local Combat = Window:CreateTab("Combat")
+local Farm = Window:CreateTab("Farm")
+local Visual = Window:CreateTab("Visual")
 
 --// SERVICES
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RS = game:GetService("ReplicatedStorage")
-local PathfindingService = game:GetService("PathfindingService")
 
---// REMOTES
-local Events = RS:WaitForChild("Events")
-local Swing = Events:WaitForChild("SwingTool")
-local Interact = Events:WaitForChild("InteractStructure")
-local UseItem = Events:WaitForChild("UseBagItem")
-local Consume = Events:WaitForChild("Consume")
-local Pickup = Events:WaitForChild("Pickup")
-local Swap = Events:WaitForChild("ToolSwapFromBag")
-local Target = Events:WaitForChild("TargetAcquire")
+--// SAFE REMOTES
+local Events = RS:FindFirstChild("Events")
+if not Events then warn("No Events found") return end
+
+local Swing = Events:FindFirstChild("SwingTool")
+local Interact = Events:FindFirstChild("InteractStructure")
+local UseItem = Events:FindFirstChild("UseBagItem")
+local Pickup = Events:FindFirstChild("Pickup")
 
 --// SETTINGS
 local Settings = {
     AutoHit = false,
-    AutoHeal = false,
-    HealAt = 50,
-    HealItem = "Bloodfruit",
-    HealSpeed = 0.1,
-
     GoldFarm = false,
     PlantFarm = false,
-    SelectedPlant = "Bloodfruit",
-
+    AutoHeal = false,
     ESP = false
 }
 
---// FUNCTIONS
-local function Char()
-    return LocalPlayer.Character
-end
+--// CHAR
+local function Char() return LocalPlayer.Character end
+local function Root() return Char() and Char():FindFirstChild("HumanoidRootPart") end
+local function Hum() return Char() and Char():FindFirstChildOfClass("Humanoid") end
 
-local function Root()
-    return Char() and Char():FindFirstChild("HumanoidRootPart")
-end
-
-local function Hum()
-    return Char() and Char():FindFirstChildOfClass("Humanoid")
-end
-
-local function Equip(tool)
-    pcall(function()
-        Swap:FireServer(tool)
-    end)
-end
-
---// AUTO HIT
+--------------------------------------------------
+-- ⚔️ AUTO HIT (REMOTE BASED)
+--------------------------------------------------
 local function AutoHit()
+    if not Swing then return end
+
     local root = Root()
     if not root then return end
 
-    Equip("Emerald Blade")
-
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("Model") and v ~= Char() then
-            local hrp = v:FindFirstChild("HumanoidRootPart")
-            local hum = v:FindFirstChildOfClass("Humanoid")
+    for _,v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and v.Character then
+            local hrp = v.Character:FindFirstChild("HumanoidRootPart")
+            local hum = v.Character:FindFirstChildOfClass("Humanoid")
 
             if hrp and hum and hum.Health > 0 then
-                if (hrp.Position - root.Position).Magnitude < 15 then
-                    Target:FireServer(v)
-                    Swing:FireServer(v)
-                    break
+                if (root.Position - hrp.Position).Magnitude < 12 then
+                    Swing:FireServer(v.Character)
                 end
             end
         end
     end
 end
 
---// WALK
-local function WalkTo(pos)
-    local char = Char()
-    if not char then return end
-
-    local hum = Hum()
-    local path = PathfindingService:CreatePath()
-    path:ComputeAsync(char.HumanoidRootPart.Position, pos)
-
-    for _, wp in pairs(path:GetWaypoints()) do
-        hum:MoveTo(wp.Position)
-        hum.MoveToFinished:Wait()
-    end
-end
-
---// GOLD FARM
+--------------------------------------------------
+-- ⛏️ GOLD FARM (BASIC WORKING)
+--------------------------------------------------
 local function GoldFarm()
-    Equip("God Pick")
+    if not Swing then return end
 
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") then
-            
-            if v.Name:lower():find("ice") or v.Name:lower():find("gold") then
-                
-                WalkTo(v.Position)
+    local root = Root()
+    if not root then return end
 
-                for i = 1, 20 do
-                    Swing:FireServer(v)
-                    task.wait(0.1)
-                end
+    for _,v in pairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") and v.Name:lower():find("gold") then
+
+            if (root.Position - v.Position).Magnitude < 20 then
+                Swing:FireServer(v)
             end
         end
     end
 end
 
---// PLANT FARM
+--------------------------------------------------
+-- 🌱 PLANT FARM (INTERACT BASE)
+--------------------------------------------------
 local function PlantFarm()
-    Equip("God Hoe")
+    if not Interact then return end
 
-    for _, v in pairs(workspace:GetDescendants()) do
+    for _,v in pairs(workspace:GetDescendants()) do
         if v.Name:lower():find("plantbox") then
-            
+
             pcall(function()
                 Interact:FireServer(v, "Harvest")
             end)
 
+            task.wait(0.05)
+
             pcall(function()
-                Interact:FireServer(v, "Plant", Settings.SelectedPlant)
+                Interact:FireServer(v, "Plant", "Bloodfruit")
             end)
-
-            task.wait(0.07)
         end
     end
 end
 
---// AUTO HEAL
+--------------------------------------------------
+-- 🍎 AUTO HEAL
+--------------------------------------------------
 local function AutoHeal()
+    if not UseItem then return end
+
     local hum = Hum()
-    if not hum then return end
-
-    if hum.Health <= Settings.HealAt then
-        
-        pcall(function()
-            UseItem:FireServer(Settings.HealItem)
-        end)
-
-        pcall(function()
-            Consume:FireServer(Settings.HealItem)
-        end)
+    if hum and hum.Health < 50 then
+        UseItem:FireServer("Bloodfruit")
     end
 end
 
---// AUTO COLLECT
-local function AutoCollect()
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") and v.Name:lower():find("drop") then
-            Pickup:FireServer(v)
-        end
-    end
-end
-
---// ESP
+--------------------------------------------------
+-- 👁️ ESP (WORKING)
+--------------------------------------------------
 local ESPs = {}
 
-local function ToggleESP(state)
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
+local function UpdateESP(state)
+    for _,plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character then
+
             if state then
-                local hl = Instance.new("Highlight")
-                hl.Parent = plr.Character
-                ESPs[plr] = hl
+                if not ESPs[plr] then
+                    local hl = Instance.new("Highlight")
+                    hl.FillColor = Color3.fromRGB(255,0,0)
+                    hl.Parent = plr.Character
+                    ESPs[plr] = hl
+                end
             else
                 if ESPs[plr] then
                     ESPs[plr]:Destroy()
+                    ESPs[plr] = nil
                 end
             end
+
         end
     end
 end
 
---// UI
-local Combat = Window:CreateTab("Combat")
-local Farm = Window:CreateTab("Farm")
-local Visual = Window:CreateTab("Visual")
+--------------------------------------------------
+-- UI BINDS
+--------------------------------------------------
 
 Combat:CreateToggle({
     Name = "Auto Hit",
@@ -208,13 +168,6 @@ Combat:CreateToggle({
 Combat:CreateToggle({
     Name = "Auto Heal",
     Callback = function(v) Settings.AutoHeal = v end
-})
-
-Combat:CreateSlider({
-    Name = "Heal HP",
-    Range = {1,99},
-    Increment = 1,
-    Callback = function(v) Settings.HealAt = v end
 })
 
 Farm:CreateToggle({
@@ -227,23 +180,19 @@ Farm:CreateToggle({
     Callback = function(v) Settings.PlantFarm = v end
 })
 
-Farm:CreateDropdown({
-    Name = "Plant Select",
-    Options = {"Bloodfruit","Jelly","Lemon","Pumpkin","Blossom","Frostfruit","Carrot"},
-    Callback = function(v) Settings.SelectedPlant = v end
-})
-
 Visual:CreateToggle({
     Name = "ESP",
     Callback = function(v)
         Settings.ESP = v
-        ToggleESP(v)
+        UpdateESP(v)
     end
 })
 
---// LOOP
+--------------------------------------------------
+-- MAIN LOOP (SAFE)
+--------------------------------------------------
 task.spawn(function()
-    while task.wait(0.1) do
+    while task.wait(0.2) do
         
         if Settings.AutoHit then AutoHit() end
         if Settings.GoldFarm then GoldFarm() end
@@ -252,3 +201,5 @@ task.spawn(function()
 
     end
 end)
+
+print("FULL SCRIPT LOADED")
