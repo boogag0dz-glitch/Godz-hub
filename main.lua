@@ -1,6 +1,6 @@
 -- GODZ HUB (Delta/Xeno Compatible)
 
-local Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/main/source.lua"))()
+local Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/main/source.lua", true))()
 
 local Window = Fluent:CreateWindow({
     Title = "GODZ HUB",
