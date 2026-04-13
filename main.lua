@@ -1,6 +1,6 @@
 --// SERVICES
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
@@ -9,192 +9,191 @@ local Camera = workspace.CurrentCamera
 --// SETTINGS
 local Settings = {
     AutoHeal = false,
-    HealAt = 50,
     AutoHit = false,
-    HitboxSize = 1,
     GoldFarm = false,
-    AutoCollect = false,
-    SelectedPlant = "Bloodfruit"
+    ESP = false
 }
 
---// CLEAN UI (FIXED FOR YOUR SCRIPT)
+--// UI (WIND STYLE)
 
-local ScreenGui = Instance.new("ScreenGui")
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 ScreenGui.Name = "GodzHub"
 ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = game.CoreGui
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, 260, 0, 350)
-Main.Position = UDim2.new(0.1, 0, 0.2, 0)
-Main.BackgroundColor3 = Color3.fromRGB(20,20,20)
-Main.BorderSizePixel = 0
+Main.Size = UDim2.new(0, 300, 0, 380)
+Main.Position = UDim2.new(0.4,0,0.3,0)
+Main.BackgroundColor3 = Color3.fromRGB(18,18,18)
+Main.Active = true
+Main.Draggable = true
 Instance.new("UICorner", Main)
 
+-- Title
 local Title = Instance.new("TextLabel", Main)
-Title.Size = UDim2.new(1,0,0,35)
+Title.Size = UDim2.new(1,0,0,40)
 Title.Text = "Godz Hub"
 Title.BackgroundTransparency = 1
-Title.TextColor3 = Color3.fromRGB(255,255,255)
+Title.TextColor3 = Color3.new(1,1,1)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
 
+-- Container
 local Container = Instance.new("Frame", Main)
-Container.Size = UDim2.new(1,-10,1,-45)
-Container.Position = UDim2.new(0,5,0,40)
+Container.Size = UDim2.new(1,-10,1,-50)
+Container.Position = UDim2.new(0,5,0,45)
 Container.BackgroundTransparency = 1
 
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0,6)
 
--- BUTTON
-local function makeButton(text, callback)
+-- Button
+local function Toggle(name, key)
     local btn = Instance.new("TextButton", Container)
-    btn.Size = UDim2.new(1,0,0,32)
-    btn.BackgroundColor3 = Color3.fromRGB(35,35,35)
-    btn.TextColor3 = Color3.fromRGB(255,255,255)
-    btn.Text = text
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 14
+    btn.Size = UDim2.new(1,0,0,35)
+    btn.Text = name .. ": OFF"
+    btn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    btn.TextColor3 = Color3.new(1,1,1)
     Instance.new("UICorner", btn)
 
     btn.MouseButton1Click:Connect(function()
-        callback(btn)
-    end)
-
-    return btn
-end
-
--- TOGGLE
-local function makeToggle(name, setting)
-    makeButton(name .. ": OFF", function(btn)
-        Settings[setting] = not Settings[setting]
-
-        btn.Text = name .. ": " .. (Settings[setting] and "ON" or "OFF")
-        btn.BackgroundColor3 = Settings[setting]
-            and Color3.fromRGB(50,120,50)
-            or Color3.fromRGB(35,35,35)
+        Settings[key] = not Settings[key]
+        btn.Text = name .. ": " .. (Settings[key] and "ON" or "OFF")
     end)
 end
 
--- SLIDER (cycle)
-local function makeSlider(name, min, max, default, setting)
-    local value = default
-    Settings[setting] = default
+Toggle("Auto Heal","AutoHeal")
+Toggle("Auto Hit","AutoHit")
+Toggle("Gold Farm","GoldFarm")
+Toggle("ESP","ESP")
 
-    makeButton(name .. ": " .. value, function(btn)
-        value += 1
-        if value > max then value = min end
-
-        Settings[setting] = value
-        btn.Text = name .. ": " .. value
-    end)
-end
-
--- MINIMIZE
-makeButton("Minimize", function()
-    Container.Visible = not Container.Visible
-end)
-
---// UI CONTROLS
-
-makeToggle("Auto Heal", "AutoHeal")
-
-makeSlider("Heal At", 0, 99, 50, "HealAt")
-
-makeToggle("Auto Hit", "AutoHit")
-
-makeSlider("Hitbox Size", 1, 16, 1, "HitboxSize")
-
-makeToggle("Gold Farm", "GoldFarm")
-
-makeToggle("Auto Collect", "AutoCollect")
-
--- PLANT SELECTOR
-local Plants = {"Bloodfruit","Jelly","Lemon","Pumpkin","Blossom","Frostfruit","Carrot"}
-local currentIndex = 1
-
-makeButton("Plant: Bloodfruit", function(btn)
-    currentIndex += 1
-    if currentIndex > #Plants then currentIndex = 1 end
-
-    Settings.SelectedPlant = Plants[currentIndex]
-    btn.Text = "Plant: " .. Settings.SelectedPlant
-end)
---// GOLD FARM
-local function tweenTo(pos)
-    local root = getRoot(getChar())
-    if root then
-        local t = TweenService:Create(root, TweenInfo.new(2), {CFrame = pos})
-        t:Play()
-        t.Completed:Wait()
+-- KEYBIND (M)
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.M then
+        Main.Visible = not Main.Visible
     end
+end)
+
+--// FUNCTIONS
+local function getChar()
+    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 end
 
+local function getRoot()
+    local char = getChar()
+    return char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHum()
+    return getChar():FindFirstChildOfClass("Humanoid")
+end
+
+--// AUTO HEAL (FIXED)
 task.spawn(function()
     while task.wait(0.2) do
-        if Settings.GoldFarm then
-            local char = getChar()
-            local tool = getTool(char)
+        if Settings.AutoHeal then
+            local hum = getHum()
 
-            if char and tool then
-                for _, v in pairs(workspace:GetDescendants()) do
-                    if v:IsA("BasePart") and v.Name:lower():find("gold") then
-                        tweenTo(v.CFrame + Vector3.new(0,3,0))
-                        for i=1,15 do
-                            tool:Activate()
-                            task.wait(0.1)
-                        end
-                    end
+            if hum and hum.Health < hum.MaxHealth then
+                local fruit = LocalPlayer.Backpack:FindFirstChild("Bloodfruit")
+
+                if fruit then
+                    hum:EquipTool(fruit)
+                    fruit:Activate()
                 end
             end
         end
     end
 end)
 
---// INDICATORS
-local indicators = {}
+--// AUTO PATH (TO GOLD)
+local function getNearestGold()
+    local closest, dist = nil, math.huge
+    local root = getRoot()
 
-local function createIndicator(plr)
-    local arrow = Instance.new("TextLabel", ScreenGui)
-    arrow.Size = UDim2.new(0,50,0,50)
-    arrow.BackgroundTransparency = 1
-    arrow.Text = "▲"
-    arrow.TextScaled = true
-    arrow.AnchorPoint = Vector2.new(0.5,0.5)
-    indicators[plr] = arrow
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("Model") and v.Name:lower():find("gold") then
+            local part = v:FindFirstChildWhichIsA("BasePart")
+
+            if part then
+                local d = (part.Position - root.Position).Magnitude
+                if d < dist then
+                    dist = d
+                    closest = part
+                end
+            end
+        end
+    end
+
+    return closest
 end
 
-for _, p in pairs(Players:GetPlayers()) do
-    if p ~= LocalPlayer then createIndicator(p) end
-end
+-- AUTO FARM
+task.spawn(function()
+    while task.wait(0.3) do
+        if Settings.GoldFarm then
+            local root = getRoot()
+            local gold = getNearestGold()
 
-Players.PlayerAdded:Connect(createIndicator)
+            if root and gold then
+                root.CFrame = gold.CFrame + Vector3.new(0,3,0)
+            end
+        end
+    end
+end)
+
+--// ESP (PLAYERS + GOLD)
+
+local ESPObjects = {}
+
+local function createESP(obj, color)
+    local box = Drawing.new("Square")
+    box.Color = color
+    box.Thickness = 2
+    box.Filled = false
+    ESPObjects[obj] = box
+end
 
 RunService.RenderStepped:Connect(function()
-    local root = getRoot(getChar())
-    if not root then return end
+    for obj, box in pairs(ESPObjects) do
+        if obj and obj.Parent then
+            local pos, vis = Camera:WorldToViewportPoint(obj.Position)
 
-    for plr, arrow in pairs(indicators) do
-        local char = plr.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-
-        if hrp then
-            local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-
-            arrow.TextColor3 = (plr.Team == LocalPlayer.Team) and Color3.fromRGB(0,255,0) or Color3.fromRGB(255,0,0)
-
-            if not onScreen then
-                arrow.Visible = true
-                local center = Camera.ViewportSize/2
-                local dir = (Vector2.new(pos.X,pos.Y) - center).Unit
-                arrow.Position = UDim2.new(0, center.X + dir.X*(center.X-30), 0, center.Y + dir.Y*(center.Y-30))
-                arrow.Rotation = math.deg(math.atan2(dir.Y, dir.X)) + 90
+            if vis then
+                box.Size = Vector2.new(50,50)
+                box.Position = Vector2.new(pos.X-25, pos.Y-25)
+                box.Visible = Settings.ESP
             else
-                arrow.Visible = false
+                box.Visible = false
             end
         else
-            arrow.Visible = false
+            box:Remove()
+            ESPObjects[obj] = nil
+        end
+    end
+end)
+
+-- CREATE ESP
+task.spawn(function()
+    while task.wait(2) do
+        if Settings.ESP then
+            for _, plr in pairs(Players:GetPlayers()) do
+                if plr ~= LocalPlayer and plr.Character then
+                    local root = plr.Character:FindFirstChild("HumanoidRootPart")
+                    if root and not ESPObjects[root] then
+                        createESP(root, Color3.fromRGB(255,0,0))
+                    end
+                end
+            end
+
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v:IsA("Model") and v.Name:lower():find("gold") then
+                    local part = v:FindFirstChildWhichIsA("BasePart")
+                    if part and not ESPObjects[part] then
+                        createESP(part, Color3.fromRGB(255,255,0))
+                    end
+                end
+            end
         end
     end
 end)
