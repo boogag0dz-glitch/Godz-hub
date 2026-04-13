@@ -1,51 +1,32 @@
---// LOAD RAYFIELD SAFE
-local success, Rayfield = pcall(function()
-    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-end)
+--// LOAD UI
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
-if not success then
-    warn("Rayfield failed")
-    return
-end
-
---// WINDOW
 local Window = Rayfield:CreateWindow({
-   Name = "Godz Hub V2",
-   LoadingTitle = "Godz Hub",
-   LoadingSubtitle = "Loaded",
-   ConfigurationSaving = {
-      Enabled = true,
-      FolderName = "GodzHub",
-      FileName = "Config"
-   }
+    Name = "Godz Hub Legit",
+    LoadingTitle = "Godz Hub",
+    LoadingSubtitle = "Safe Mode",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "GodzHub",
+        FileName = "Legit"
+    }
 })
 
 --// TABS
 local Combat = Window:CreateTab("Combat")
 local Farm = Window:CreateTab("Farm")
-local Visual = Window:CreateTab("Visual")
+local PlayerTab = Window:CreateTab("Player")
 
 --// SERVICES
 local Players = game:GetService("Players")
+local PathfindingService = game:GetService("PathfindingService")
 local LocalPlayer = Players.LocalPlayer
-local RS = game:GetService("ReplicatedStorage")
-
---// SAFE REMOTES
-local Events = RS:FindFirstChild("Events")
-if not Events then warn("No Events found") return end
-
-local Swing = Events:FindFirstChild("SwingTool")
-local Interact = Events:FindFirstChild("InteractStructure")
-local UseItem = Events:FindFirstChild("UseBagItem")
-local Pickup = Events:FindFirstChild("Pickup")
 
 --// SETTINGS
 local Settings = {
     AutoHit = false,
-    GoldFarm = false,
-    PlantFarm = false,
     AutoHeal = false,
-    ESP = false
+    AutoFarm = false
 }
 
 --// CHAR
@@ -53,14 +34,19 @@ local function Char() return LocalPlayer.Character end
 local function Root() return Char() and Char():FindFirstChild("HumanoidRootPart") end
 local function Hum() return Char() and Char():FindFirstChildOfClass("Humanoid") end
 
+--// TOOL
+local function GetTool()
+    return Char() and Char():FindFirstChildOfClass("Tool")
+end
+
 --------------------------------------------------
--- ⚔️ AUTO HIT (REMOTE BASED)
+-- ⚔️ AUTO HIT (LEGIT)
 --------------------------------------------------
 local function AutoHit()
-    if not Swing then return end
-
+    local tool = GetTool()
     local root = Root()
-    if not root then return end
+
+    if not tool or not root then return end
 
     for _,v in pairs(Players:GetPlayers()) do
         if v ~= LocalPlayer and v.Character then
@@ -68,8 +54,11 @@ local function AutoHit()
             local hum = v.Character:FindFirstChildOfClass("Humanoid")
 
             if hrp and hum and hum.Health > 0 then
-                if (root.Position - hrp.Position).Magnitude < 12 then
-                    Swing:FireServer(v.Character)
+                local dist = (root.Position - hrp.Position).Magnitude
+
+                if dist < 10 then
+                    tool:Activate() -- legit swing
+                    task.wait(0.3) -- human delay
                 end
             end
         end
@@ -77,91 +66,75 @@ local function AutoHit()
 end
 
 --------------------------------------------------
--- ⛏️ GOLD FARM (BASIC WORKING)
+-- 🍎 AUTO HEAL (LEGIT)
 --------------------------------------------------
-local function GoldFarm()
-    if not Swing then return end
+local function AutoHeal()
+    local hum = Hum()
+    if not hum then return end
 
+    if hum.Health < 50 then
+        for _,item in pairs(LocalPlayer.Backpack:GetChildren()) do
+            if item.Name:lower():find("fruit") then
+                hum:EquipTool(item)
+                item:Activate()
+                task.wait(1)
+            end
+        end
+    end
+end
+
+--------------------------------------------------
+-- 🧭 WALK TO POSITION (NO TP)
+--------------------------------------------------
+local function WalkTo(pos)
+    local char = Char()
+    local hum = Hum()
+
+    if not char or not hum then return end
+
+    local path = PathfindingService:CreatePath()
+    path:ComputeAsync(char.PrimaryPart.Position, pos)
+
+    local waypoints = path:GetWaypoints()
+
+    for _,waypoint in pairs(waypoints) do
+        hum:MoveTo(waypoint.Position)
+        hum.MoveToFinished:Wait()
+    end
+end
+
+--------------------------------------------------
+-- ⛏️ AUTO FARM (WALK + HIT)
+--------------------------------------------------
+local function AutoFarm()
     local root = Root()
-    if not root then return end
+    local tool = GetTool()
+
+    if not root or not tool then return end
 
     for _,v in pairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") and v.Name:lower():find("gold") then
 
-            if (root.Position - v.Position).Magnitude < 20 then
-                Swing:FireServer(v)
+            local dist = (root.Position - v.Position).Magnitude
+
+            if dist > 15 then
+                WalkTo(v.Position)
+            end
+
+            if (root.Position - v.Position).Magnitude < 12 then
+                tool:Activate()
+                task.wait(0.4)
             end
         end
     end
 end
 
 --------------------------------------------------
--- 🌱 PLANT FARM (INTERACT BASE)
---------------------------------------------------
-local function PlantFarm()
-    if not Interact then return end
-
-    for _,v in pairs(workspace:GetDescendants()) do
-        if v.Name:lower():find("plantbox") then
-
-            pcall(function()
-                Interact:FireServer(v, "Harvest")
-            end)
-
-            task.wait(0.05)
-
-            pcall(function()
-                Interact:FireServer(v, "Plant", "Bloodfruit")
-            end)
-        end
-    end
-end
-
---------------------------------------------------
--- 🍎 AUTO HEAL
---------------------------------------------------
-local function AutoHeal()
-    if not UseItem then return end
-
-    local hum = Hum()
-    if hum and hum.Health < 50 then
-        UseItem:FireServer("Bloodfruit")
-    end
-end
-
---------------------------------------------------
--- 👁️ ESP (WORKING)
---------------------------------------------------
-local ESPs = {}
-
-local function UpdateESP(state)
-    for _,plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character then
-
-            if state then
-                if not ESPs[plr] then
-                    local hl = Instance.new("Highlight")
-                    hl.FillColor = Color3.fromRGB(255,0,0)
-                    hl.Parent = plr.Character
-                    ESPs[plr] = hl
-                end
-            else
-                if ESPs[plr] then
-                    ESPs[plr]:Destroy()
-                    ESPs[plr] = nil
-                end
-            end
-
-        end
-    end
-end
-
---------------------------------------------------
--- UI BINDS
+-- UI
 --------------------------------------------------
 
 Combat:CreateToggle({
-    Name = "Auto Hit",
+    Name = "Auto Hit (Legit)",
     Callback = function(v) Settings.AutoHit = v end
 })
 
@@ -171,35 +144,29 @@ Combat:CreateToggle({
 })
 
 Farm:CreateToggle({
-    Name = "Gold Farm",
-    Callback = function(v) Settings.GoldFarm = v end
-})
-
-Farm:CreateToggle({
-    Name = "Plant Farm",
-    Callback = function(v) Settings.PlantFarm = v end
-})
-
-Visual:CreateToggle({
-    Name = "ESP",
-    Callback = function(v)
-        Settings.ESP = v
-        UpdateESP(v)
-    end
+    Name = "Auto Farm Gold (Walk)",
+    Callback = function(v) Settings.AutoFarm = v end
 })
 
 --------------------------------------------------
--- MAIN LOOP (SAFE)
+-- LOOP
 --------------------------------------------------
 task.spawn(function()
     while task.wait(0.2) do
         
-        if Settings.AutoHit then AutoHit() end
-        if Settings.GoldFarm then GoldFarm() end
-        if Settings.PlantFarm then PlantFarm() end
-        if Settings.AutoHeal then AutoHeal() end
+        if Settings.AutoHit then
+            pcall(AutoHit)
+        end
+        
+        if Settings.AutoHeal then
+            pcall(AutoHeal)
+        end
+        
+        if Settings.AutoFarm then
+            pcall(AutoFarm)
+        end
 
     end
 end)
 
-print("FULL SCRIPT LOADED")
+print("LEGIT SYSTEM LOADED")
