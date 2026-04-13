@@ -1,64 +1,80 @@
---// LOAD UI
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+--// LOAD RAYFIELD
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
+--// WINDOW
 local Window = Rayfield:CreateWindow({
-    Name = "Godz Hub Legit",
-    LoadingTitle = "Godz Hub",
-    LoadingSubtitle = "Safe Mode",
+    Name = "Godz Hub",
+    LoadingTitle = "Godz Hub Loading...",
+    LoadingSubtitle = "by you",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "GodzHub",
-        FileName = "Legit"
+        FileName = "Config"
     }
 })
 
 --// TABS
-local Combat = Window:CreateTab("Combat")
-local Farm = Window:CreateTab("Farm")
-local PlayerTab = Window:CreateTab("Player")
+local Combat = Window:CreateTab("Combat", 4483362458)
+local Farm = Window:CreateTab("Farm", 4483362458)
+local Visuals = Window:CreateTab("Visuals", 4483362458)
 
 --// SERVICES
 local Players = game:GetService("Players")
-local PathfindingService = game:GetService("PathfindingService")
 local LocalPlayer = Players.LocalPlayer
 
 --// SETTINGS
 local Settings = {
-    AutoHit = false,
     AutoHeal = false,
-    AutoFarm = false
+    HealHP = 50,
+
+    AutoHit = false,
+    HitDelay = 0.2,
+
+    ESP = false
 }
 
---// CHAR
-local function Char() return LocalPlayer.Character end
-local function Root() return Char() and Char():FindFirstChild("HumanoidRootPart") end
-local function Hum() return Char() and Char():FindFirstChildOfClass("Humanoid") end
+--// HELPERS
+local function getChar()
+    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+end
 
---// TOOL
-local function GetTool()
-    return Char() and Char():FindFirstChildOfClass("Tool")
+local function getHum()
+    return getChar():FindFirstChildOfClass("Humanoid")
+end
+
+local function getRoot()
+    return getChar():FindFirstChild("HumanoidRootPart")
+end
+
+local function getTool()
+    return getChar():FindFirstChildOfClass("Tool")
 end
 
 --------------------------------------------------
--- ⚔️ AUTO HIT (LEGIT)
+-- 🔥 AUTO HEAL (UI CLICK METHOD)
 --------------------------------------------------
-local function AutoHit()
-    local tool = GetTool()
-    local root = Root()
+local function AutoHeal()
+    local hum = getHum()
+    if not hum then return end
+    if hum.Health >= Settings.HealHP then return end
 
-    if not tool or not root then return end
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-    for _,v in pairs(Players:GetPlayers()) do
-        if v ~= LocalPlayer and v.Character then
-            local hrp = v.Character:FindFirstChild("HumanoidRootPart")
-            local hum = v.Character:FindFirstChildOfClass("Humanoid")
+    for _,v in pairs(playerGui:GetDescendants()) do
+        if v:IsA("TextLabel") or v:IsA("TextButton") or v:IsA("ImageLabel") then
+            
+            local match = false
+            if v.Text and string.lower(v.Text):find("blood") then match = true end
+            if v.Name and string.lower(v.Name):find("blood") then match = true end
 
-            if hrp and hum and hum.Health > 0 then
-                local dist = (root.Position - hrp.Position).Magnitude
-
-                if dist < 10 then
-                    tool:Activate() -- legit swing
-                    task.wait(0.3) -- human delay
+            if match then
+                local parent = v.Parent
+                if parent and (parent:IsA("ImageButton") or parent:IsA("TextButton")) then
+                    for _,c in pairs(getconnections(parent.MouseButton1Click)) do
+                        c:Fire()
+                    end
+                    task.wait(0.8)
+                    return
                 end
             end
         end
@@ -66,107 +82,137 @@ local function AutoHit()
 end
 
 --------------------------------------------------
--- 🍎 AUTO HEAL (LEGIT)
+-- ⚔️ AUTO HIT (FIXED)
 --------------------------------------------------
-local function AutoHeal()
-    local hum = Hum()
-    if not hum then return end
-
-    if hum.Health < 50 then
-        for _,item in pairs(LocalPlayer.Backpack:GetChildren()) do
-            if item.Name:lower():find("fruit") then
-                hum:EquipTool(item)
-                item:Activate()
-                task.wait(1)
-            end
-        end
-    end
-end
-
---------------------------------------------------
--- 🧭 WALK TO POSITION (NO TP)
---------------------------------------------------
-local function WalkTo(pos)
-    local char = Char()
-    local hum = Hum()
-
-    if not char or not hum then return end
-
-    local path = PathfindingService:CreatePath()
-    path:ComputeAsync(char.PrimaryPart.Position, pos)
-
-    local waypoints = path:GetWaypoints()
-
-    for _,waypoint in pairs(waypoints) do
-        hum:MoveTo(waypoint.Position)
-        hum.MoveToFinished:Wait()
-    end
-end
-
---------------------------------------------------
--- ⛏️ AUTO FARM (WALK + HIT)
---------------------------------------------------
-local function AutoFarm()
-    local root = Root()
-    local tool = GetTool()
+local function AutoHit()
+    local char = getChar()
+    local root = getRoot()
+    local tool = getTool()
 
     if not root or not tool then return end
 
     for _,v in pairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") and v.Name:lower():find("gold") then
+        if v:IsA("Model") and v ~= char then
+            local hrp = v:FindFirstChild("HumanoidRootPart")
+            local hum = v:FindFirstChildOfClass("Humanoid")
 
-            local dist = (root.Position - v.Position).Magnitude
-
-            if dist > 15 then
-                WalkTo(v.Position)
-            end
-
-            if (root.Position - v.Position).Magnitude < 12 then
-                tool:Activate()
-                task.wait(0.4)
+            if hrp and hum and hum.Health > 0 then
+                local dist = (hrp.Position - root.Position).Magnitude
+                if dist <= 12 then
+                    tool:Activate()
+                    return
+                end
             end
         end
     end
 end
 
 --------------------------------------------------
--- UI
+-- 👁️ ESP (SIMPLE)
 --------------------------------------------------
+local ESPObjects = {}
 
-Combat:CreateToggle({
-    Name = "Auto Hit (Legit)",
-    Callback = function(v) Settings.AutoHit = v end
-})
+local function CreateESP(plr)
+    if plr == LocalPlayer then return end
 
-Combat:CreateToggle({
-    Name = "Auto Heal",
-    Callback = function(v) Settings.AutoHeal = v end
-})
+    local highlight = Instance.new("Highlight")
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
 
-Farm:CreateToggle({
-    Name = "Auto Farm Gold (Walk)",
-    Callback = function(v) Settings.AutoFarm = v end
-})
+    highlight.Parent = game.CoreGui
+    ESPObjects[plr] = highlight
+
+    game:GetService("RunService").RenderStepped:Connect(function()
+        if not Settings.ESP then
+            highlight.Enabled = false
+            return
+        end
+
+        local char = plr.Character
+        if char then
+            highlight.Adornee = char
+            highlight.Enabled = true
+
+            if plr.Team == LocalPlayer.Team then
+                highlight.FillColor = Color3.fromRGB(0,255,0)
+            else
+                highlight.FillColor = Color3.fromRGB(255,0,0)
+            end
+        else
+            highlight.Enabled = false
+        end
+    end)
+end
+
+for _,p in pairs(Players:GetPlayers()) do
+    CreateESP(p)
+end
+Players.PlayerAdded:Connect(CreateESP)
 
 --------------------------------------------------
--- LOOP
+-- 🧠 LOOPS
 --------------------------------------------------
 task.spawn(function()
-    while task.wait(0.2) do
-        
-        if Settings.AutoHit then
-            pcall(AutoHit)
-        end
-        
+    while task.wait(0.1) do
         if Settings.AutoHeal then
             pcall(AutoHeal)
         end
-        
-        if Settings.AutoFarm then
-            pcall(AutoFarm)
-        end
 
+        if Settings.AutoHit then
+            pcall(AutoHit)
+            task.wait(Settings.HitDelay)
+        end
     end
 end)
 
-print("LEGIT SYSTEM LOADED")
+--------------------------------------------------
+-- 🎛️ UI (COMBAT)
+--------------------------------------------------
+Combat:CreateToggle({
+    Name = "Auto Heal",
+    CurrentValue = false,
+    Callback = function(v)
+        Settings.AutoHeal = v
+    end
+})
+
+Combat:CreateSlider({
+    Name = "Heal HP",
+    Range = {1, 99},
+    Increment = 1,
+    CurrentValue = 50,
+    Callback = function(v)
+        Settings.HealHP = v
+    end
+})
+
+Combat:CreateToggle({
+    Name = "Auto Hit",
+    CurrentValue = false,
+    Callback = function(v)
+        Settings.AutoHit = v
+    end
+})
+
+Combat:CreateSlider({
+    Name = "Hit Delay",
+    Range = {0.05, 1},
+    Increment = 0.05,
+    CurrentValue = 0.2,
+    Callback = function(v)
+        Settings.HitDelay = v
+    end
+})
+
+--------------------------------------------------
+-- 🎛️ VISUALS
+--------------------------------------------------
+Visuals:CreateToggle({
+    Name = "ESP (Green Ally / Red Enemy)",
+    CurrentValue = false,
+    Callback = function(v)
+        Settings.ESP = v
+    end
+})
+
+Rayfield:LoadConfiguration()
