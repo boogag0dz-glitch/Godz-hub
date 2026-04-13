@@ -1,4 +1,12 @@
--- SETTINGS
+--// SERVICES
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+--// SETTINGS
 local Settings = {
     AutoHeal = false,
     HealAt = 50,
@@ -8,368 +16,182 @@ local Settings = {
     AutoCollect = false,
     SelectedPlant = "Bloodfruit"
 }
-Settings.SelectedPlant = "Bloodfruit"
-Settings.AutoCollect = false
-makeButton("Auto Heal: OFF", function(btn)
-    Settings.AutoHeal = not Settings.AutoHeal
-    btn.Text = "Auto Heal: " .. (Settings.AutoHeal and "ON" or "OFF")
-end)
-makeButton("Auto Collect: OFF", function(btn)
-    Settings.AutoCollect = not Settings.AutoCollect
-    btn.Text = "Auto Collect: " .. (Settings.AutoCollect and "ON" or "OFF")
-end)
--- UI SECTION
--- (your buttons + sliders here)
---// UI LIB (simple custom)
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+
+--// CLEAN UI (FIXED FOR YOUR SCRIPT)
+
+local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "GodzHub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game.CoreGui
 
-local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0, 250, 0, 300)
-Frame.Position = UDim2.new(0.1, 0, 0.2, 0)
-Frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.new(0, 260, 0, 350)
+Main.Position = UDim2.new(0.1, 0, 0.2, 0)
+Main.BackgroundColor3 = Color3.fromRGB(20,20,20)
+Main.BorderSizePixel = 0
+Instance.new("UICorner", Main)
 
-local UIListLayout = Instance.new("UIListLayout", Frame)
-UIListLayout.Padding = UDim.new(0,5)
+local Title = Instance.new("TextLabel", Main)
+Title.Size = UDim2.new(1,0,0,35)
+Title.Text = "Godz Hub"
+Title.BackgroundTransparency = 1
+Title.TextColor3 = Color3.fromRGB(255,255,255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 18
 
--- Minimize Button
-local MinBtn = Instance.new("TextButton", Frame)
-MinBtn.Size = UDim2.new(1,0,0,30)
-MinBtn.Text = "Minimize"
+local Container = Instance.new("Frame", Main)
+Container.Size = UDim2.new(1,-10,1,-45)
+Container.Position = UDim2.new(0,5,0,40)
+Container.BackgroundTransparency = 1
 
-local minimized = false
-MinBtn.MouseButton1Click:Connect(function()
-    minimized = not minimized
-    for _, v in pairs(Frame:GetChildren()) do
-        if v:IsA("TextButton") and v ~= MinBtn then
-            v.Visible = not minimized
-        end
-    end
-end)
---// Services
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
+local Layout = Instance.new("UIListLayout", Container)
+Layout.Padding = UDim.new(0,6)
 
---// Functions
-local function getChar()
-    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-end
-
-local function getHum(char)
-    return char:FindFirstChildOfClass("Humanoid")
-end
-
-local function getRoot(char)
-    return char:FindFirstChild("HumanoidRootPart")
-end
-
-local function getTool(char)
-    return char:FindFirstChildOfClass("Tool")
-end
-
---// MAIN LOOP
-task.spawn(function()
-    while task.wait(0.15) do
-        local char = getChar()
-        local hum = getHum(char)
-        local root = getRoot(char)
-
-        if char and hum and root then
-
-            -- 🟢 AUTO HEAL (Bloodfruit)
-            if Settings.AutoHeal and hum.Health <= Settings.HealAt then
-                local fruit = LocalPlayer.Backpack:FindFirstChild("Bloodfruit") 
-                    or char:FindFirstChild("Bloodfruit")
-
-                if fruit and fruit:IsA("Tool") then
-                    hum:EquipTool(fruit)
-                    fruit:Activate()
-                end
-            end
-
-            -- 🔴 SMART AUTO HIT (only when near something)
-            if Settings.AutoHit then
-                local tool = getTool(char)
-                if tool then
-                    for _, v in pairs(workspace:GetDescendants()) do
-                        if v:IsA("Model") and v ~= char then
-                            local hrp = v:FindFirstChild("HumanoidRootPart")
-                            local vh = v:FindFirstChildOfClass("Humanoid")
-
-                            if hrp and vh and vh.Health > 0 then
-                                local dist = (hrp.Position - root.Position).Magnitude
-                                if dist < 15 then
-                                    tool:Activate()
-                                    break
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-
-            -- 🔵 HITBOX EXPANDER
-            if Settings.HitboxSize > 1 then
-                for _, v in pairs(workspace:GetDescendants()) do
-                    if v:IsA("Model") and v ~= char then
-                        local hrp = v:FindFirstChild("HumanoidRootPart")
-                        if hrp then
-                            hrp.Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize)
-                            hrp.Transparency = 0.5
-                            hrp.CanCollide = false
-                        end
-                    end
-                end
-            end
-
-        end
-    end
-end)
-makeButton("Auto Collect: OFF", function(btn)
-    Settings.AutoCollect = not Settings.AutoCollect
-    btn.Text = "Auto Collect: " .. (Settings.AutoCollect and "ON" or "OFF")
-end)
---// SETTINGS
-local Settings = {
-    AutoHeal = false,
-    HealAt = 50,
-
-    AutoHit = false,
-
-    HitboxSize = 1,
-
-    GoldFarm = false
-}
-
--- Helper to make buttons
+-- BUTTON
 local function makeButton(text, callback)
-    local btn = Instance.new("TextButton", Frame)
-    btn.Size = UDim2.new(1,0,0,30)
+    local btn = Instance.new("TextButton", Container)
+    btn.Size = UDim2.new(1,0,0,32)
+    btn.BackgroundColor3 = Color3.fromRGB(35,35,35)
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
     btn.Text = text
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 14
+    Instance.new("UICorner", btn)
 
-    btn.MouseButton1Click:Connect(callback)
+    btn.MouseButton1Click:Connect(function()
+        callback(btn)
+    end)
+
     return btn
 end
 
--- Helper for sliders
-local function makeSlider(name, min, max, default, callback)
-    local btn = Instance.new("TextButton", Frame)
-    btn.Size = UDim2.new(1,0,0,30)
-    btn.Text = name .. ": " .. default
+-- TOGGLE
+local function makeToggle(name, setting)
+    makeButton(name .. ": OFF", function(btn)
+        Settings[setting] = not Settings[setting]
 
-    local value = default
-
-    btn.MouseButton1Click:Connect(function()
-        value = value + 1
-        if value > max then value = min end
-        btn.Text = name .. ": " .. value
-        callback(value)
+        btn.Text = name .. ": " .. (Settings[setting] and "ON" or "OFF")
+        btn.BackgroundColor3 = Settings[setting]
+            and Color3.fromRGB(50,120,50)
+            or Color3.fromRGB(35,35,35)
     end)
 end
 
---// BUTTONS
+-- SLIDER (cycle)
+local function makeSlider(name, min, max, default, setting)
+    local value = default
+    Settings[setting] = default
 
-makeButton("Auto Heal: OFF", function(btn)
-    Settings.AutoHeal = not Settings.AutoHeal
-    btn.Text = "Auto Heal: " .. (Settings.AutoHeal and "ON" or "OFF")
+    makeButton(name .. ": " .. value, function(btn)
+        value += 1
+        if value > max then value = min end
+
+        Settings[setting] = value
+        btn.Text = name .. ": " .. value
+    end)
+end
+
+-- MINIMIZE
+makeButton("Minimize", function()
+    Container.Visible = not Container.Visible
 end)
 
-makeSlider("Heal At", 0, 99, 50, function(v)
-    Settings.HealAt = v
-end)
+--// UI CONTROLS
 
-makeButton("Auto Hit: OFF", function(btn)
-    Settings.AutoHit = not Settings.AutoHit
-    btn.Text = "Auto Hit: " .. (Settings.AutoHit and "ON" or "OFF")
-end)
+makeToggle("Auto Heal", "AutoHeal")
 
-makeSlider("Hitbox Size", 1, 16, 1, function(v)
-    Settings.HitboxSize = v
-end)
+makeSlider("Heal At", 0, 99, 50, "HealAt")
 
-makeButton("Gold Farm: OFF", function(btn)
-    Settings.GoldFarm = not Settings.GoldFarm
-    btn.Text = "Gold Farm: " .. (Settings.GoldFarm and "ON" or "OFF")
-end)
-local Plants = {
-    "Bloodfruit",
-    "Jelly",
-    "Lemon",
-    "Pumpkin",
-    "Blossom",
-    "Frostfruit",
-    "Carrot"
-}
+makeToggle("Auto Hit", "AutoHit")
 
+makeSlider("Hitbox Size", 1, 16, 1, "HitboxSize")
+
+makeToggle("Gold Farm", "GoldFarm")
+
+makeToggle("Auto Collect", "AutoCollect")
+
+-- PLANT SELECTOR
+local Plants = {"Bloodfruit","Jelly","Lemon","Pumpkin","Blossom","Frostfruit","Carrot"}
 local currentIndex = 1
 
 makeButton("Plant: Bloodfruit", function(btn)
-    currentIndex = currentIndex + 1
-    if currentIndex > #Plants then
-        currentIndex = 1
-    end
+    currentIndex += 1
+    if currentIndex > #Plants then currentIndex = 1 end
 
     Settings.SelectedPlant = Plants[currentIndex]
     btn.Text = "Plant: " .. Settings.SelectedPlant
 end)
--- COMBAT SECTION
--- (autoheal + autohit + hitbox here)
-
--- FARM SECTION
--- (gold farm + plant farm here)
--- ❄️ GOLD FARM (ICE BIOME)
-
-local TweenService = game:GetService("TweenService")
-
+--// GOLD FARM
 local function tweenTo(pos)
-    local char = getChar()
-    local root = getRoot(char)
-
+    local root = getRoot(getChar())
     if root then
-        local tween = TweenService:Create(
-            root,
-            TweenInfo.new(2, Enum.EasingStyle.Linear),
-            {CFrame = pos}
-        )
-        tween:Play()
-        tween.Completed:Wait()
+        local t = TweenService:Create(root, TweenInfo.new(2), {CFrame = pos})
+        t:Play()
+        t.Completed:Wait()
     end
 end
 
 task.spawn(function()
     while task.wait(0.2) do
         if Settings.GoldFarm then
-
             local char = getChar()
             local tool = getTool(char)
 
             if char and tool then
-
-                -- find ice gold nodes
-                local nodes = {}
-
                 for _, v in pairs(workspace:GetDescendants()) do
                     if v:IsA("BasePart") and v.Name:lower():find("gold") then
-                        table.insert(nodes, v)
+                        tweenTo(v.CFrame + Vector3.new(0,3,0))
+                        for i=1,15 do
+                            tool:Activate()
+                            task.wait(0.1)
+                        end
                     end
                 end
-
-                -- sort closest first
-                table.sort(nodes, function(a, b)
-                    return (a.Position - char.HumanoidRootPart.Position).Magnitude <
-                           (b.Position - char.HumanoidRootPart.Position).Magnitude
-                end)
-
-                -- go through nodes
-                for i, node in ipairs(nodes) do
-                    if not Settings.GoldFarm then break end
-
-                    tweenTo(node.CFrame + Vector3.new(0, 3, 0))
-
-                    -- hit node
-                    for i = 1, 15 do
-                        if not Settings.GoldFarm then break end
-                        tool:Activate()
-                        task.wait(0.1)
-                    end
-                end
-
             end
         end
     end
 end)
--- VISUAL SECTION
--- (indicators here)
--- 🧭 ROTATING PLAYER INDICATORS
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Camera = workspace.CurrentCamera
-
-local LocalPlayer = Players.LocalPlayer
-
--- UI
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
-ScreenGui.Name = "Indicators"
-
+--// INDICATORS
 local indicators = {}
 
 local function createIndicator(plr)
-    local arrow = Instance.new("TextLabel")
-    arrow.Size = UDim2.new(0, 50, 0, 50)
+    local arrow = Instance.new("TextLabel", ScreenGui)
+    arrow.Size = UDim2.new(0,50,0,50)
     arrow.BackgroundTransparency = 1
     arrow.Text = "▲"
     arrow.TextScaled = true
-    arrow.Font = Enum.Font.SourceSansBold
-    arrow.AnchorPoint = Vector2.new(0.5, 0.5)
-    arrow.Parent = ScreenGui
-
+    arrow.AnchorPoint = Vector2.new(0.5,0.5)
     indicators[plr] = arrow
 end
 
-local function removeIndicator(plr)
-    if indicators[plr] then
-        indicators[plr]:Destroy()
-        indicators[plr] = nil
-    end
+for _, p in pairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then createIndicator(p) end
 end
 
--- track players
-for _, plr in pairs(Players:GetPlayers()) do
-    if plr ~= LocalPlayer then
-        createIndicator(plr)
-    end
-end
+Players.PlayerAdded:Connect(createIndicator)
 
-Players.PlayerAdded:Connect(function(plr)
-    if plr ~= LocalPlayer then
-        createIndicator(plr)
-    end
-end)
-
-Players.PlayerRemoving:Connect(removeIndicator)
-
--- update loop
 RunService.RenderStepped:Connect(function()
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-
+    local root = getRoot(getChar())
     if not root then return end
 
     for plr, arrow in pairs(indicators) do
-        local pchar = plr.Character
-        local proot = pchar and pchar:FindFirstChild("HumanoidRootPart")
+        local char = plr.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
-        if pchar and proot then
-            local pos, onScreen = Camera:WorldToViewportPoint(proot.Position)
+        if hrp then
+            local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
 
-            -- team color
-            if plr.Team == LocalPlayer.Team then
-                arrow.TextColor3 = Color3.fromRGB(0,255,0)
-            else
-                arrow.TextColor3 = Color3.fromRGB(255,0,0)
-            end
+            arrow.TextColor3 = (plr.Team == LocalPlayer.Team) and Color3.fromRGB(0,255,0) or Color3.fromRGB(255,0,0)
 
-            if onScreen then
-                arrow.Visible = false
-            else
+            if not onScreen then
                 arrow.Visible = true
-
-                -- screen center
-                local center = Camera.ViewportSize / 2
-
-                -- direction from center to target
-                local dir = (Vector2.new(pos.X, pos.Y) - center).Unit
-
-                -- place arrow on edge of screen
-                local edgeX = center.X + dir.X * (center.X - 30)
-                local edgeY = center.Y + dir.Y * (center.Y - 30)
-
-                arrow.Position = UDim2.new(0, edgeX, 0, edgeY)
-
-                -- 🔥 ROTATION
-                local angle = math.deg(math.atan2(dir.Y, dir.X)) + 90
-                arrow.Rotation = angle
+                local center = Camera.ViewportSize/2
+                local dir = (Vector2.new(pos.X,pos.Y) - center).Unit
+                arrow.Position = UDim2.new(0, center.X + dir.X*(center.X-30), 0, center.Y + dir.Y*(center.Y-30))
+                arrow.Rotation = math.deg(math.atan2(dir.Y, dir.X)) + 90
+            else
+                arrow.Visible = false
             end
         else
             arrow.Visible = false
