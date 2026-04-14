@@ -6,11 +6,7 @@ local Window = Rayfield:CreateWindow({
     Name = "Godz Hub",
     LoadingTitle = "Godz Hub",
     LoadingSubtitle = "Booga Booga Reborn",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "GodzHub",
-        FileName = "Config"
-    }
+    ConfigurationSaving = { Enabled = false }
 })
 
 --// TABS
@@ -24,51 +20,58 @@ local Settings = {
 }
 
 local p = game.Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 --------------------------------------------------
--- ❤️ FIXED AUTO HEAL (Checks Inventory)
+-- ❤️ TRUE AUTO HEAL (Bypasses UI)
 --------------------------------------------------
 local function DoHeal()
     local char = p.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     
     if Settings.AutoHeal and hum and hum.Health < Settings.HealHP then
-        -- Looks for Bloodfruit in Backpack or Character
-        local fruit = p.Backpack:FindFirstChild("Bloodfruit") or char:FindFirstChild("Bloodfruit")
+        -- This looks for the Remote that handles eating
+        local Events = ReplicatedStorage:FindFirstChild("Events") or ReplicatedStorage:FindFirstChild("RemoteEvents")
+        local UseItem = Events and (Events:FindFirstChild("UseItem") or Events:FindFirstChild("EatItem"))
         
-        if fruit and fruit:IsA("Tool") then
-            hum:EquipTool(fruit)
-            fruit:Activate()
+        if UseItem then
+            -- We tell the game to eat Bloodfruit directly
+            UseItem:FireServer("Bloodfruit")
+        else
+            -- Backup method if Remotes are hidden: Manual activation
+            local fruit = p.Backpack:FindFirstChild("Bloodfruit") or char:FindFirstChild("Bloodfruit")
+            if fruit then
+                hum:EquipTool(fruit)
+                fruit:Activate()
+            end
         end
     end
 end
 
 --------------------------------------------------
--- ⚔️ FIXED AUTO FARM
+-- ⚔️ AUTO FARM
 --------------------------------------------------
 local function DoFarm()
     local char = p.Character
     local tool = char and char:FindFirstChildOfClass("Tool")
-    
     if Settings.AutoFarm and tool then
         tool:Activate()
     end
 end
 
 --------------------------------------------------
--- 🔁 MAIN LOOP
+-- 🔁 LOOP
 --------------------------------------------------
 task.spawn(function()
     while task.wait(0.3) do
-        pcall(DoHeal)
-        pcall(DoFarm)
+        if Settings.AutoHeal then pcall(DoHeal) end
+        if Settings.AutoFarm then pcall(DoFarm) end
     end
 end)
 
 --------------------------------------------------
 -- 🎛️ UI CONTROLS
 --------------------------------------------------
-
 MainTab:CreateToggle({
     Name = "Auto Heal",
     CurrentValue = false,
@@ -88,5 +91,3 @@ MainTab:CreateToggle({
     CurrentValue = false,
     Callback = function(v) Settings.AutoFarm = v end
 })
-
-Rayfield:LoadConfiguration()
