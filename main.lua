@@ -25,9 +25,50 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Main")
 
---------------------------------------------------
--- 🩸 BYTENET AUTO HEAL
---------------------------------------------------
+-- Create a label for ping display
+local PingLabel = MainTab:CreateLabel("Ping: Loading...")
+
+-- Function to measure ping
+local function measurePing()
+    local RS = game:GetService("ReplicatedStorage")
+    local event = RS:FindFirstChild("PingEvent") -- Replace with your actual RemoteEvent name
+    if event and event:IsA("RemoteEvent") then
+        local startTime = tick()
+        local responded = false
+        -- Listen for the response
+        local connection
+        connection = event.OnClientEvent:Connect(function()
+            local ping = (tick() - startTime) * 1000 -- in milliseconds
+            PingLabel:Set("Ping: " .. math.floor(ping) .. " ms")
+            responded = true
+            connection:Disconnect()
+        end)
+        -- Send ping request
+        event:FireServer()
+        -- Timeout if no response
+        task.wait(1)
+        if not responded then
+            PingLabel:Set("Ping: Timeout")
+            connection:Disconnect()
+        end
+    else
+        PingLabel:Set("Ping: RemoteEvent not found")
+    end
+end
+
+-- Add button to check ping
+MainTab:CreateButton({
+    Name = "Check Ping",
+    Callback = function()
+        measurePing()
+    end
+})
+
+-- Your existing toggles
+MainTab:CreateToggle({Name = "ByteNet Auto Heal", Callback = function(v) S.H = v end})
+MainTab:CreateToggle({Name = "ByteNet Resource Aura", Callback = function(v) S.A = v end})
+
+-- Your existing scripts for auto heal and resource aura...
 task.spawn(function()
     while true do
         local p = game.Players.LocalPlayer
@@ -46,9 +87,6 @@ task.spawn(function()
     end
 end)
 
---------------------------------------------------
--- ⚔️ BYTENET RESOURCE AURA
---------------------------------------------------
 task.spawn(function()
     while true do
         task.wait(0.1)
@@ -75,6 +113,3 @@ task.spawn(function()
         end
     end
 end)
-
-MainTab:CreateToggle({Name = "ByteNet Auto Heal", Callback = function(v) S.H = v end})
-MainTab:CreateToggle({Name = "ByteNet Resource Aura", Callback = function(v) S.A = v end})
