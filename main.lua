@@ -1,59 +1,55 @@
---// LOAD RAYFIELD
+--// 1. WAIT FOR RAYFIELD TO BE READY
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+repeat task.wait() until Rayfield
 
---// WINDOW
+--// 2. CONNECT TO THE EXACT 2026 REMOTES
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Events = ReplicatedStorage:WaitForChild("Events")
+local ConsumeRemote = Events:WaitForChild("Consume")   -- Found in your screenshot!
+local SwingRemote = Events:WaitForChild("SwingTool") -- Found in your screenshot!
+
+--// 3. SET UP THE WINDOW
 local Window = Rayfield:CreateWindow({
-    Name = "Godz Hub",
-    LoadingTitle = "Godz Hub",
-    LoadingSubtitle = "Booga Booga Reborn",
+    Name = "Godz Hub 2026",
+    LoadingTitle = "Reborn Mobile",
+    LoadingSubtitle = "By Boogag0dz",
     ConfigurationSaving = { Enabled = false }
 })
 
---// TABS
 local MainTab = Window:CreateTab("Automation", 4483362458)
-
---// SETTINGS
-local Settings = {
-    AutoHeal = false,
-    HealHP = 80,
-    AutoHit = false
-}
-
-local p = game.Players.LocalPlayer
-local VU = game:GetService("VirtualUser")
+local Settings = { AutoHeal = false, HealHP = 85, AutoHit = false }
 
 --------------------------------------------------
--- ❤️ REBORN AUTO HEAL (Direct Remote)
+-- ❤️ DYNAMIC AUTO HEAL (Using 'Consume')
 --------------------------------------------------
 local function DoHeal()
-    local char = p.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local p = game.Players.LocalPlayer
+    local hum = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
     
     if Settings.AutoHeal and hum and hum.Health < Settings.HealHP then
-        -- This uses the direct game event to eat without opening inventory
-        local event = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
-        if event and event:FindFirstChild("UseItem") then
-            event.UseItem:FireServer("Bloodfruit")
+        -- We fire the 'Consume' remote you found in ReplicatedStorage
+        ConsumeRemote:FireServer("Bloodfruit") 
+    end
+end
+
+--------------------------------------------------
+-- ⚔️ DYNAMIC AUTO HIT (Using 'SwingTool')
+--------------------------------------------------
+local function DoHit()
+    if Settings.AutoHit then
+        local tool = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        if tool then
+            -- We fire 'SwingTool' which you found in your events list
+            SwingRemote:FireServer(tool)
         end
     end
 end
 
 --------------------------------------------------
--- ⚔️ REBORN AUTO HIT (Simulated Tap)
---------------------------------------------------
-local function DoHit()
-    if Settings.AutoHit then
-        -- This forces a screen tap even if you aren't clicking
-        VU:CaptureController()
-        VU:ClickButton1(Vector2.new(0,0))
-    end
-end
-
---------------------------------------------------
--- 🔁 LOOP
+-- 🔁 MAIN LOOP
 --------------------------------------------------
 task.spawn(function()
-    while task.wait(0.1) do -- Faster loop for Reborn combat
+    while task.wait(0.1) do
         if Settings.AutoHeal then pcall(DoHeal) end
         if Settings.AutoHit then pcall(DoHit) end
     end
@@ -69,10 +65,10 @@ MainTab:CreateToggle({
 })
 
 MainTab:CreateSlider({
-    Name = "Heal at HP",
-    Range = {10, 99},
+    Name = "Heal Threshold",
+    Range = {10, 95},
     Increment = 1,
-    CurrentValue = 80,
+    CurrentValue = 85,
     Callback = function(v) Settings.HealHP = v end
 })
 
