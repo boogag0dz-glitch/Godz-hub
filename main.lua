@@ -1,20 +1,22 @@
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 repeat task.wait() until Rayfield
 
---// 🕸️ BYTENET DETECTION
+--// 🕸️ BYTENET BYPASS LOGIC
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ByteNet = nil
-for _, v in pairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
-    if v.Name == "ByteNet" or v.Name == "Net" then
+
+-- This scans for the game's hidden "Net" module
+for _, v in pairs(ReplicatedStorage:GetDescendants()) do
+    if v:IsA("ModuleScript") and (v.Name:find("Net") or v.Name:find("Byte")) then
         ByteNet = require(v)
         break
     end
 end
 
 local S = {H = false, HP = 95, CPS = 15, A = false}
-
 local Window = Rayfield:CreateWindow({
-    Name = "Godz Hub | ByteNet Edition",
-    LoadingTitle = "Syncing Server Pings...",
+    Name = "Godz Hub | ByteNet Reborn",
+    LoadingTitle = "Syncing Packets...",
     LoadingSubtitle = "By Boogag0dz"
 })
 
@@ -27,12 +29,15 @@ task.spawn(function()
     while true do
         local p = game.Players.LocalPlayer
         if S.H and p.Character and p.Character.Humanoid.Health < S.HP then
-            -- ByteNet usually uses a 'namespace' for actions
-            -- If we find the 'Consume' packet, we fire it through ByteNet
+            -- We send the 'Consume' ping through the network buffer
             pcall(function()
-                -- This is a generic way to try and ping the 'Consume' packet
-                E.Consume:FireServer("Bloodfruit") 
-                -- If the above fails, your friend's 'ByteNet' logic takes over here
+                -- Trying the two most common ByteNet paths for Reborn
+                if ByteNet and ByteNet.Packets then
+                    ByteNet.Packets.Consume:Send("Bloodfruit")
+                else
+                    -- Fallback if ByteNet is obfuscated
+                    ReplicatedStorage.Events.Consume:FireServer("Bloodfruit")
+                end
             end)
         end
         task.wait(1/S.CPS)
@@ -50,8 +55,13 @@ task.spawn(function()
             for _, obj in pairs(workspace:GetChildren()) do
                 if obj:IsA("Model") and obj:FindFirstChild("Health") then
                     if (c.HumanoidRootPart.Position - obj:GetModelCFrame().Position).Magnitude < 15 then
-                        -- Fire the swing through the standard remote as a fallback
-                        game:GetService("ReplicatedStorage").Events.Swing:FireServer(tool, obj)
+                        pcall(function()
+                            if ByteNet and ByteNet.Packets then
+                                ByteNet.Packets.Swing:Send(tool, obj)
+                            else
+                                ReplicatedStorage.Events.Swing:FireServer(tool, obj)
+                            end
+                        end)
                         break
                     end
                 end
