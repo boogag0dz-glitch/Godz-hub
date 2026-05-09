@@ -6,7 +6,7 @@ local RunService = game:GetService("RunService")
 ]]
 
 local cloneref = (cloneref or clonereference or function(instance)
-	return instance
+		return instance
 end)
 local ReplicatedStorage = cloneref(game:GetService("ReplicatedStorage"))
 local HttpService = cloneref(game:GetService("HttpService"))
