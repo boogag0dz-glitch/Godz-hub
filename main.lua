@@ -9,6 +9,10 @@ if not success or not WindUI then
     return
 end
 
+pcall(function()
+    WindUI:SetTheme("Rose")
+end)
+
 local Window = WindUI:CreateWindow({
     Title = "Blossom UI",
     Folder = "BlossomTest",
@@ -30,16 +34,6 @@ local Window = WindUI:CreateWindow({
     }
 })
 
-pcall(function()
-    WindUI:SetTheme({
-        Accent = Color3.fromRGB(255, 182, 193),
-        Outline = Color3.fromRGB(255, 220, 230),
-        Text = Color3.fromRGB(255, 240, 245),
-        Placeholder = Color3.fromRGB(220, 180, 195),
-        Background = Color3.fromRGB(35, 25, 35)
-    })
-end)
-
 Window:Tag({
     Title = "Blossom",
     Color = Color3.fromRGB(255, 182, 193),
@@ -57,7 +51,7 @@ local Tab = Main:Tab({
 
 Tab:Paragraph({
     Title = "Loaded Successfully",
-    Desc = "Blossom theme applied."
+    Desc = "Rose/Blossom theme test."
 })
 
 Tab:Button({
