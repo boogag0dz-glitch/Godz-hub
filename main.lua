@@ -690,7 +690,7 @@ SetTab:Paragraph({ Title = "UI Settings", Desc = "Customize your hub experience.
 SetTab:Space()
 SetTab:Keybind({
     Title = "Toggle UI Key", Desc = "Press to open/close the hub.",
-    Value = "RightShift",
+    Value = "RightAlt",
     Callback = function(v)
         pcall(function() Window:SetToggleKey(Enum.KeyCode[v]) end)
     end,
