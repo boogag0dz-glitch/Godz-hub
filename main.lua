@@ -680,9 +680,9 @@ EspTab:Button({
         notify("👁️ Visuals", "All cleared.")
     end,
 })
----------------------------------------
-AUTO HEAL TAB
----------------------------------------
+-----------------------------------------
+-- AUTO HEAL TAB
+-----------------------------------------
 local AUTO_HEAL = true
 local HEAL_PERCENT = 99
 local CPS_SPEED = 500
