@@ -18,9 +18,10 @@ print("[CherryHub] WindUI loaded!")
 -- Services
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
 local LocalPlayer       = Players.LocalPlayer
 
--- Packets (Booga Booga Reborn's own network module)
+-- Packets
 local Packets = require(ReplicatedStorage.Modules.Packets)
 
 -- Theme
@@ -35,60 +36,53 @@ local Blossom = {
     Purple = Color3.fromRGB(196, 181, 253),
 }
 
+-- Fruit list
+local FRUIT_LIST = {
+    "Bloodfruit", "Fruitcake", "Cooked Meat", "Cooked Fish",
+    "Berry", "Cloudberry", "Frostfruit", "Blossom",
+    "Mango", "Watermelon", "Orange", "Lemon",
+    "Apple", "Strawberry", "Bluefruit", "Yellowfruit", "Pinefruit",
+}
+
 -- ============================================================
 -- STATE
 -- ============================================================
 local State = {
+    -- Keybinds (stored as KeyCode enum names)
+    ToggleUIKey       = "RightShift",
+    AutofarmKey       = "F1",
+    AutoHealKey       = "F2",
+    PathfindKey       = "F3",
+
     -- Auto Heal
-    AutoHealOn    = false,
-    HealPercent   = 99,
-    CpsSpeed      = 500,
-    SelectedFruit = "Bloodfruit",
+    AutoHealOn        = false,
+    HealPercent       = 99,
+    CpsSpeed          = 500,
+    SelectedFruit     = "Bloodfruit",
 
     -- Autofarm
-    AutofarmOn    = false,
-    AutoCollectOn = false,
+    AutofarmOn        = false,
+    AutoCollectOn     = false,
 
     -- Raycast Pathfinding
-    PathOn        = false,
-    PathTarget    = nil,
-    PathInterval  = 0.3,
-    PathStopDist  = 4,
+    PathOn            = false,
+    PathTarget        = nil,
+    PathInterval      = 0.3,
+    PathStopDist      = 4,
 
     -- Speed
-    SpeedLock     = false,
-    Speed         = 16,
-    Jump          = 50,
+    SpeedLock         = false,
+    Speed             = 16,
+    Jump              = 50,
 
     -- ESP
-    ESPOn         = false,
-    MobESPOn      = false,
-    TagsOn        = false,
-    ChamsOn       = false,
-    ESPFill       = Color3.fromRGB(255, 150, 170),
-    ESPOutline    = Color3.fromRGB(255, 255, 255),
-    ESPCache      = {},
-}
-
--- All healable fruits in the game
-local FRUIT_LIST = {
-    "Bloodfruit",
-    "Fruitcake",
-    "Cooked Meat",
-    "Cooked Fish",
-    "Berry",
-    "Cloudberry",
-    "Frostfruit",
-    "Blossom",
-    "Mango",
-    "Watermelon",
-    "Orange",
-    "Lemon",
-    "Apple",
-    "Strawberry",
-    "Bluefruit",
-    "Yellowfruit",
-    "Pinefruit",
+    ESPOn             = false,
+    MobESPOn          = false,
+    TagsOn            = false,
+    ChamsOn           = false,
+    ESPFill           = Color3.fromRGB(255, 150, 170),
+    ESPOutline        = Color3.fromRGB(255, 255, 255),
+    ESPCache          = {},
 }
 
 -- ============================================================
@@ -115,43 +109,33 @@ LocalPlayer.CharacterAdded:Connect(function()
 end)
 
 -- ============================================================
--- AUTO HEAL CORE (Packets-based, your code)
+-- AUTO HEAL CORE
 -- ============================================================
-local healHumanoid  = nil
-local cachedFruit   = nil
-local lastUseTime   = 0
+local healHumanoid = nil
+local cachedFruit  = nil
+local lastUseTime  = 0
 
 local function setupCharacter(char)
     healHumanoid = char:WaitForChild("Humanoid")
-    cachedFruit  = nil -- reset cache on respawn
+    cachedFruit  = nil
 end
-
-if LocalPlayer.Character then
-    setupCharacter(LocalPlayer.Character)
-end
+if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(setupCharacter)
 
 task.spawn(function()
     while task.wait() do
         if not State.AutoHealOn then continue end
         if not healHumanoid or healHumanoid.Health <= 0 then continue end
-
         local hp = (healHumanoid.Health / healHumanoid.MaxHealth) * 100
         if hp > State.HealPercent then continue end
-
         local now = os.clock()
         if now - lastUseTime < (1 / State.CpsSpeed) then continue end
-
-        -- Find MainGui inventory
         local mainGui = LocalPlayer.PlayerGui:FindFirstChild("MainGui")
         if not mainGui then continue end
-
         local inventory = mainGui:FindFirstChild("RightPanel")
             and mainGui.RightPanel:FindFirstChild("Inventory")
             and mainGui.RightPanel.Inventory:FindFirstChild("List")
         if not inventory then continue end
-
-        -- Re-cache if lost
         if not cachedFruit or not cachedFruit.Parent then
             cachedFruit = nil
             for _, item in ipairs(inventory:GetChildren()) do
@@ -161,7 +145,6 @@ task.spawn(function()
                 end
             end
         end
-
         if cachedFruit then
             local success = pcall(function()
                 Packets.UseBagItem.send(cachedFruit.LayoutOrder)
@@ -169,7 +152,7 @@ task.spawn(function()
             if success then
                 lastUseTime = os.clock()
             else
-                cachedFruit = nil -- reset cache if send failed
+                cachedFruit = nil
             end
         end
     end
@@ -212,9 +195,6 @@ local function autofarmLoop()
     end
 end
 
--- ============================================================
--- AUTO COLLECT CORE
--- ============================================================
 local function autoCollectLoop()
     while State.AutoCollectOn do
         local root = getRoot()
@@ -271,29 +251,19 @@ local function rotateY(vec, deg)
 end
 
 local function flatDir(from, to)
-    local d = Vector3.new(to.X - from.X, 0, to.Z - from.Z)
+    local d = Vector3.new(to.X-from.X, 0, to.Z-from.Z)
     return d.Magnitude > 0.01 and d.Unit or Vector3.new(0,0,1)
 end
 
 local function steer(rootPos, targetPos)
     local toTarget = flatDir(rootPos, targetPos)
-    local origin   = rootPos + Vector3.new(0, 1, 0)
-
-    -- Try direct
+    local origin   = rootPos + Vector3.new(0,1,0)
     local directDist, hitInst, hitPos = probeRay(origin, toTarget)
-    if directDist >= RAY_DIST - 1 then
-        return toTarget, false, false
-    end
-
-    -- Check jump
+    if directDist >= RAY_DIST - 1 then return toTarget, false, false end
     if hitInst and hitPos then
         local obstH = hitPos.Y - (rootPos.Y - 2.5)
-        if obstH > 0 and obstH <= STEP_HEIGHT then
-            return toTarget, true, false
-        end
+        if obstH > 0 and obstH <= STEP_HEIGHT then return toTarget, true, false end
     end
-
-    -- Probe angles
     local bestDir, bestDist = nil, 0
     for i = 1, PROBE_COUNT do
         local angle = (i / PROBE_COUNT) * PROBE_ANGLE
@@ -302,13 +272,8 @@ local function steer(rootPos, targetPos)
         if ld > bestDist then bestDist = ld bestDir = rotateY(toTarget, -angle) end
         if rd > bestDist then bestDist = rd bestDir = rotateY(toTarget,  angle) end
     end
-
-    -- Probe up (slopes)
-    local upDist = probeRay(origin, (toTarget + Vector3.new(0, 0.5, 0)).Unit)
-    if upDist > bestDist then
-        return toTarget, true, false
-    end
-
+    local upDist = probeRay(origin, (toTarget + Vector3.new(0,0.5,0)).Unit)
+    if upDist > bestDist then return toTarget, true, false end
     if bestDir then return bestDir, false, false end
     return -toTarget, false, true
 end
@@ -318,7 +283,6 @@ local function raycastPathfindLoop()
         local target = State.PathTarget and Players:FindFirstChild(State.PathTarget)
         local root   = getRoot()
         local hum    = getHum()
-
         if target and target.Character and root and hum then
             local tr = target.Character:FindFirstChild("HumanoidRootPart")
             if tr then
@@ -328,13 +292,8 @@ local function raycastPathfindLoop()
                     local walkTo = root.Position + dir * 8
                     walkTo = Vector3.new(walkTo.X, tr.Position.Y, walkTo.Z)
                     hum:MoveTo(walkTo)
-                    if doJump and hum.FloorMaterial ~= Enum.Material.Air then
-                        hum.Jump = true
-                    end
-                    if stuck then
-                        task.wait(0.2)
-                        hum.Jump = true
-                    end
+                    if doJump and hum.FloorMaterial ~= Enum.Material.Air then hum.Jump = true end
+                    if stuck then task.wait(0.2) hum.Jump = true end
                 else
                     hum:MoveTo(root.Position)
                 end
@@ -359,20 +318,15 @@ local function addESP(p)
     h.Adornee = p.Character h.Parent = p.Character
     State.ESPCache[p.Name] = h
 end
-
 local function clearESP(p)
     local h = State.ESPCache[p.Name]
     if h and h.Parent then h:Destroy() end
     State.ESPCache[p.Name] = nil
 end
-
 local function clearAllESP()
-    for _, h in pairs(State.ESPCache) do
-        if h and h.Parent then h:Destroy() end
-    end
+    for _, h in pairs(State.ESPCache) do if h and h.Parent then h:Destroy() end end
     State.ESPCache = {}
 end
-
 local function espLoop()
     while State.ESPOn do
         for _, p in ipairs(Players:GetPlayers()) do
@@ -380,10 +334,7 @@ local function espLoop()
                 if p.Character then
                     addESP(p)
                     local h = State.ESPCache[p.Name]
-                    if h and h.Parent then
-                        h.FillColor    = State.ESPFill
-                        h.OutlineColor = State.ESPOutline
-                    end
+                    if h and h.Parent then h.FillColor = State.ESPFill h.OutlineColor = State.ESPOutline end
                 else clearESP(p) end
             end
         end
@@ -391,7 +342,6 @@ local function espLoop()
     end
     clearAllESP()
 end
-
 Players.PlayerRemoving:Connect(clearESP)
 
 local function mobEspLoop()
@@ -405,8 +355,7 @@ local function mobEspLoop()
                 end
                 if not isPlayer then
                     local h = Instance.new("Highlight")
-                    h.FillColor = Color3.fromRGB(255,200,100)
-                    h.OutlineColor = Color3.fromRGB(255,230,150)
+                    h.FillColor = Color3.fromRGB(255,200,100) h.OutlineColor = Color3.fromRGB(255,230,150)
                     h.FillTransparency = 0.4 h.OutlineTransparency = 0
                     h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                     h.Adornee = obj h.Parent = obj
@@ -431,34 +380,26 @@ local function addNameTag(p)
     local char = p.Character if not char then return end
     local head = char:FindFirstChild("Head")
     if not head or head:FindFirstChild("CB_Tag") then return end
-
     local bb = Instance.new("BillboardGui")
     bb.Name = "CB_Tag" bb.Size = UDim2.new(0,130,0,44)
     bb.StudsOffset = Vector3.new(0,3.5,0) bb.AlwaysOnTop = true bb.Parent = head
-
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1,0,0.72,0)
-    frame.BackgroundColor3 = Blossom.Pink
+    frame.Size = UDim2.new(1,0,0.72,0) frame.BackgroundColor3 = Blossom.Pink
     frame.BackgroundTransparency = 0.25 frame.BorderSizePixel = 0 frame.Parent = bb
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0,7)
-
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1,-8,1,0) label.Position = UDim2.new(0,4,0,0)
     label.BackgroundTransparency = 1 label.Text = p.Name
     label.TextColor3 = Color3.fromRGB(80,30,40) label.Font = Enum.Font.GothamBold
     label.TextScaled = true label.Parent = frame
-
     local hbBg = Instance.new("Frame")
     hbBg.Size = UDim2.new(1,0,0.22,0) hbBg.Position = UDim2.new(0,0,0.78,0)
-    hbBg.BackgroundColor3 = Color3.fromRGB(180,80,100)
-    hbBg.BorderSizePixel = 0 hbBg.Parent = bb
+    hbBg.BackgroundColor3 = Color3.fromRGB(180,80,100) hbBg.BorderSizePixel = 0 hbBg.Parent = bb
     Instance.new("UICorner", hbBg).CornerRadius = UDim.new(0,4)
-
     local hbFill = Instance.new("Frame")
     hbFill.Size = UDim2.new(1,0,1,0) hbFill.BackgroundColor3 = Blossom.Green
     hbFill.BorderSizePixel = 0 hbFill.Parent = hbBg
     Instance.new("UICorner", hbFill).CornerRadius = UDim.new(0,4)
-
     local hum = char:FindFirstChildOfClass("Humanoid")
     if hum then
         local function upd()
@@ -470,24 +411,17 @@ local function addNameTag(p)
         hum:GetPropertyChangedSignal("Health"):Connect(upd)
     end
 end
-
 local function clearAllTags()
     for _, p in ipairs(Players:GetPlayers()) do
         if p.Character then
             local head = p.Character:FindFirstChild("Head")
-            if head then
-                local t = head:FindFirstChild("CB_Tag")
-                if t then t:Destroy() end
-            end
+            if head then local t = head:FindFirstChild("CB_Tag") if t then t:Destroy() end end
         end
     end
 end
-
 local function nameTagLoop()
     while State.TagsOn do
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p.Character then addNameTag(p) end
-        end
+        for _, p in ipairs(Players:GetPlayers()) do if p.Character then addNameTag(p) end end
         task.wait(2)
     end
     clearAllTags()
@@ -510,10 +444,71 @@ local Window = WindUI:CreateWindow({
     },
     Topbar = { Height = 44, ButtonsType = "Mac" },
 })
-
 Window:Tag({ Title = "Booga Booga Reborn", Color = Blossom.Pink, Border = true })
 print("[CherryHub] Window created!")
 
+-- ============================================================
+-- PERSISTENT KEYBIND SYSTEM
+-- ============================================================
+-- This runs OUTSIDE the window so it works even when UI is minimized/hidden.
+-- It listens directly to UserInputService — no dependency on WindUI state.
+
+local UIVisible = true  -- track whether UI is shown
+
+local function toggleUI()
+    UIVisible = not UIVisible
+    if UIVisible then
+        Window:Show()   -- bring back UI
+    else
+        Window:Hide()   -- hide UI (not destroy, so keybind still works)
+    end
+end
+
+-- The persistent listener — this NEVER gets destroyed with the window
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end  -- don't fire if typing in chat etc.
+
+    local key = input.KeyCode
+
+    -- Toggle UI
+    if key == Enum.KeyCode[State.ToggleUIKey] then
+        toggleUI()
+    end
+
+    -- Autofarm hotkey
+    if key == Enum.KeyCode[State.AutofarmKey] then
+        State.AutofarmOn = not State.AutofarmOn
+        if State.AutofarmOn then task.spawn(autofarmLoop) end
+        notify("🌾 Autofarm", State.AutofarmOn and "Started! (" .. State.AutofarmKey .. ")" or "Stopped! (" .. State.AutofarmKey .. ")")
+    end
+
+    -- Auto Heal hotkey
+    if key == Enum.KeyCode[State.AutoHealKey] then
+        State.AutoHealOn = not State.AutoHealOn
+        cachedFruit = nil
+        notify("🍎 Auto Heal", State.AutoHealOn and "Started! (" .. State.AutoHealKey .. ")" or "Stopped! (" .. State.AutoHealKey .. ")")
+    end
+
+    -- Pathfinding hotkey
+    if key == Enum.KeyCode[State.PathfindKey] then
+        State.PathOn = not State.PathOn
+        if State.PathOn then
+            if not State.PathTarget then
+                State.PathOn = false
+                notify("🏃 Pathfinding","Select a target first!")
+            else
+                task.spawn(raycastPathfindLoop)
+                notify("🏃 Pathfinding","Following: " .. State.PathTarget .. " (" .. State.PathfindKey .. ")")
+            end
+        else
+            notify("🏃 Pathfinding","Stopped! (" .. State.PathfindKey .. ")")
+        end
+    end
+end)
+
+-- ============================================================
+-- SECTIONS
+-- ============================================================
 local S_Main = Window:Section({ Title = "🌸 Main"     })
 local S_Farm = Window:Section({ Title = "🌾 Farming"  })
 local S_Move = Window:Section({ Title = "🏃 Movement" })
@@ -526,19 +521,24 @@ local S_Set  = Window:Section({ Title = "⚙️ Settings" })
 local HomeTab = S_Main:Tab({ Title = "Home", Icon = "home", IconColor = Blossom.Pink })
 
 HomeTab:Paragraph({
-    Title = "🌸 Welcome!",
-    Desc  = "Cherry Blossom Hub for Booga Booga Reborn.\nUse the tabs to navigate features.",
+    Title = "🌸 Welcome to Cherry Blossom Hub!",
+    Desc  = "A full-featured hub for Booga Booga Reborn.\nAll hotkeys work even when the UI is minimized.",
+})
+HomeTab:Space()
+HomeTab:Paragraph({
+    Title = "Default Hotkeys",
+    Desc  = "RightShift — Toggle UI open/close\nF1 — Toggle Autofarm\nF2 — Toggle Auto Heal\nF3 — Toggle Pathfinding\n\nChange these in the ⚙️ Settings tab!",
 })
 HomeTab:Space()
 HomeTab:Paragraph({
     Title = "Features",
-    Desc  = "🌾 Autofarm + Auto Collect\n🍎 Auto Heal (Packets-based, fruit selector)\n🏃 Raycast Pathfinding + Teleport\n💨 Speed & Jump\n👁️ ESP, Mob ESP, Name Tags, Chams",
+    Desc  = "🌾 Autofarm + Auto Collect\n🍎 Auto Heal (Packets, fruit selector)\n🏃 Raycast Pathfinding + Teleport\n💨 Speed & Jump\n👁️ ESP, Mob ESP, Name Tags, Chams",
 })
 HomeTab:Space()
 HomeTab:Button({
     Title = "Show Welcome Notification", Icon = "sparkles", Justify = "Center",
     Callback = function()
-        notify("🌸 Cherry Blossom Hub", "All features ready!", 4)
+        notify("🌸 Cherry Blossom Hub", "All features ready! Hotkeys work when minimized.", 4)
     end,
 })
 
@@ -549,7 +549,7 @@ local FarmTab = S_Farm:Tab({ Title = "Autofarm", Icon = "leaf", IconColor = Blos
 
 FarmTab:Paragraph({
     Title = "Autofarm Info",
-    Desc  = "Finds the nearest ProximityPrompt every 0.6s, walks to it if needed, then fires it.",
+    Desc  = "Finds the nearest ProximityPrompt every 0.6s, walks to it if needed, then fires it.\nHotkey: F1 (changeable in Settings)",
 })
 FarmTab:Space()
 FarmTab:Toggle({
@@ -603,100 +603,71 @@ local HealTab = S_Farm:Tab({ Title = "Auto Heal", Icon = "heart", IconColor = Bl
 
 HealTab:Paragraph({
     Title = "Auto Heal Info",
-    Desc  = "Uses Booga Booga's own Packets.UseBagItem to heal directly from your inventory.\nSelect your fruit, set your HP threshold, and enable.",
+    Desc  = "Uses Packets.UseBagItem to heal directly from your inventory.\nHotkey: F2 (changeable in Settings)",
 })
 HealTab:Space()
-
--- Fruit selector dropdown
 HealTab:Dropdown({
-    Title    = "Heal Fruit",
-    Desc     = "Choose which fruit to use for healing.",
-    Values   = FRUIT_LIST,
-    Value    = 1, -- defaults to Bloodfruit
+    Title = "Heal Fruit", Desc = "Which fruit to heal with.",
+    Values = FRUIT_LIST, Value = 1,
     Callback = function(value)
         State.SelectedFruit = value
-        cachedFruit = nil -- reset cache when fruit changes
-        notify("🍎 Auto Heal", "Fruit set to: " .. value)
+        cachedFruit = nil
+        notify("🍎 Auto Heal","Fruit set to: " .. value)
     end,
 })
 HealTab:Space()
-
--- HP threshold slider
 HealTab:Slider({
     Title = "Heal When HP Below (%)",
-    Desc  = "Start healing when your HP % drops below this value.",
-    Step  = 1,
-    Value = { Min = 1, Max = 99, Default = 99 },
-    Callback = function(v)
-        State.HealPercent = v
-    end,
+    Desc  = "Start healing when HP % drops below this.",
+    Step = 1, Value = { Min = 1, Max = 99, Default = 99 },
+    Callback = function(v) State.HealPercent = v end,
 })
 HealTab:Space()
-
--- CPS speed slider
 HealTab:Slider({
     Title = "Heal Speed (CPS)",
-    Desc  = "How many times per second to send the heal packet. Higher = faster healing.",
-    Step  = 50,
-    Value = { Min = 50, Max = 1000, Default = 500 },
-    Callback = function(v)
-        State.CpsSpeed = v
-    end,
+    Desc  = "Packets sent per second. Higher = faster heal.",
+    Step = 50, Value = { Min = 50, Max = 1000, Default = 500 },
+    Callback = function(v) State.CpsSpeed = v end,
 })
 HealTab:Space()
-
--- Enable toggle
 HealTab:Toggle({
     Title = "Enable Auto Heal",
-    Desc  = "Automatically heals using selected fruit via Packets.UseBagItem.",
+    Desc  = "Auto heals using selected fruit via Packets.UseBagItem.",
     Value = false,
     Callback = function(v)
         State.AutoHealOn = v
-        cachedFruit = nil -- reset cache on toggle
-        notify("🍎 Auto Heal", v and "Auto heal active! Using: " .. State.SelectedFruit or "Auto heal stopped.")
+        cachedFruit = nil
+        notify("🍎 Auto Heal", v and "Active! Using: " .. State.SelectedFruit or "Stopped.")
     end,
 })
 HealTab:Space()
-
--- Status paragraph showing current settings
 HealTab:Paragraph({
-    Title = "Heal Priority Info",
-    Desc  = "Best fruits to use:\n🩸 Bloodfruit — 4 HP (best for combat)\n🎂 Fruitcake — 4 HP + 35 food\n🍖 Cooked Meat — 1 HP + 35 food\n🐟 Cooked Fish — 1 HP + 20 food\n🫐 Berry — 1.5 HP (easy to farm)\n\nTip: Use Bloodfruit for PvP, Cooked Meat for long farm sessions.",
+    Title = "Fruit Priority Guide",
+    Desc  = "🩸 Bloodfruit — 4 HP (best PvP)\n🎂 Fruitcake — 4 HP + 35 food\n🍖 Cooked Meat — 1 HP + 35 food\n🐟 Cooked Fish — 1 HP + 20 food\n🫐 Berry — 1.5 HP (easy to farm)",
 })
 HealTab:Space()
-
--- Manual heal button
 HealTab:Button({
-    Title    = "Heal Now (Manual)",
-    Desc     = "Sends one heal packet immediately using selected fruit.",
-    Icon     = "heart",
-    Justify  = "Center",
-    Color    = Blossom.Red,
+    Title = "Heal Now (Manual)", Icon = "heart", Justify = "Center",
+    Color = Blossom.Red,
     Callback = function()
         if not healHumanoid then notify("Error","No character!") return end
-
         local mainGui = LocalPlayer.PlayerGui:FindFirstChild("MainGui")
         if not mainGui then notify("🍎 Heal","MainGui not found!") return end
-
         local inventory = mainGui:FindFirstChild("RightPanel")
             and mainGui.RightPanel:FindFirstChild("Inventory")
             and mainGui.RightPanel.Inventory:FindFirstChild("List")
         if not inventory then notify("🍎 Heal","Inventory not found!") return end
-
         local found = nil
         for _, item in ipairs(inventory:GetChildren()) do
             if item:IsA("ImageLabel") and item.Name == State.SelectedFruit then
                 found = item break
             end
         end
-
         if found then
-            local success = pcall(function()
-                Packets.UseBagItem.send(found.LayoutOrder)
-            end)
-            notify("🍎 Heal", success and "Used: " .. State.SelectedFruit or "Failed to send packet!")
+            local success = pcall(function() Packets.UseBagItem.send(found.LayoutOrder) end)
+            notify("🍎 Heal", success and "Used: " .. State.SelectedFruit or "Packet failed!")
         else
-            notify("🍎 Heal", State.SelectedFruit .. " not found in inventory!")
+            notify("🍎 Heal", State.SelectedFruit .. " not in inventory!")
         end
     end,
 })
@@ -708,7 +679,7 @@ local PathTab = S_Move:Tab({ Title = "Pathfinding", Icon = "navigation", IconCol
 
 PathTab:Paragraph({
     Title = "Custom Raycast Pathfinding",
-    Desc  = "Steers around obstacles using raycasts — no PathfindingService needed.\n• Probes 7 angles left & right\n• Jumps obstacles under 3.5 studs\n• Backs up if completely stuck",
+    Desc  = "Steers around obstacles using raycasts.\n• Probes 7 angles left & right (up to 45°)\n• Jumps obstacles under 3.5 studs\n• Backs up if fully stuck\nHotkey: F3 (changeable in Settings)",
 })
 PathTab:Space()
 
@@ -736,15 +707,13 @@ PathTab:Button({
 PathTab:Space()
 PathTab:Slider({
     Title = "Tick Rate (s)", Desc = "How often raycast steers. Lower = smoother.",
-    Step = 0.05,
-    Value = { Min = 0.05, Max = 1, Default = 0.3 },
+    Step = 0.05, Value = { Min = 0.05, Max = 1, Default = 0.3 },
     Callback = function(v) State.PathInterval = v end,
 })
 PathTab:Space()
 PathTab:Slider({
     Title = "Stop Distance (studs)", Desc = "Stop when within this distance of target.",
-    Step = 1,
-    Value = { Min = 2, Max = 20, Default = 4 },
+    Step = 1, Value = { Min = 2, Max = 20, Default = 4 },
     Callback = function(v) State.PathStopDist = v end,
 })
 PathTab:Space()
@@ -820,7 +789,6 @@ SpeedTab:Toggle({
     end,
 })
 SpeedTab:Space()
-
 local PGroup = SpeedTab:Group({})
 PGroup:Button({
     Title = "Default", Justify = "Center", Icon = "",
@@ -962,20 +930,76 @@ EspTab:Button({
 -- ============================================================
 local SetTab = S_Set:Tab({ Title = "Settings", Icon = "settings", IconColor = Blossom.Soft })
 
-SetTab:Paragraph({ Title = "UI Settings", Desc = "Customize your hub." })
+SetTab:Section({ Title = "⌨️ Keybinds" })
+
+SetTab:Paragraph({
+    Title = "About Keybinds",
+    Desc  = "All keybinds use a persistent UserInputService listener so they work even when the UI is hidden/minimized. Change any key below — it takes effect immediately.",
+})
 SetTab:Space()
+
+-- Toggle UI keybind
 SetTab:Keybind({
-    Title = "Toggle UI Key", Desc = "Open/close the hub.",
+    Title = "Toggle UI Open/Close",
+    Desc  = "Press to show or hide the hub window.",
     Value = "RightShift",
     Callback = function(v)
-        pcall(function() Window:SetToggleKey(Enum.KeyCode[v]) end)
+        State.ToggleUIKey = v
+        notify("⌨️ Keybind","Toggle UI set to: " .. v)
     end,
 })
 SetTab:Space()
+
+-- Autofarm keybind
+SetTab:Keybind({
+    Title = "Autofarm Toggle Key",
+    Desc  = "Press to start/stop autofarm without opening the UI.",
+    Value = "F1",
+    Callback = function(v)
+        State.AutofarmKey = v
+        notify("⌨️ Keybind","Autofarm key set to: " .. v)
+    end,
+})
+SetTab:Space()
+
+-- Auto Heal keybind
+SetTab:Keybind({
+    Title = "Auto Heal Toggle Key",
+    Desc  = "Press to start/stop auto heal without opening the UI.",
+    Value = "F2",
+    Callback = function(v)
+        State.AutoHealKey = v
+        notify("⌨️ Keybind","Auto Heal key set to: " .. v)
+    end,
+})
+SetTab:Space()
+
+-- Pathfinding keybind
+SetTab:Keybind({
+    Title = "Pathfinding Toggle Key",
+    Desc  = "Press to start/stop pathfinding without opening the UI.",
+    Value = "F3",
+    Callback = function(v)
+        State.PathfindKey = v
+        notify("⌨️ Keybind","Pathfinding key set to: " .. v)
+    end,
+})
+SetTab:Space()
+
+SetTab:Section({ Title = "ℹ️ Info" })
+
+SetTab:Paragraph({
+    Title = "Current Keybinds",
+    Desc  = "These update live as you change them above:\n• Toggle UI — RightShift (default)\n• Autofarm — F1 (default)\n• Auto Heal — F2 (default)\n• Pathfinding — F3 (default)",
+})
+SetTab:Space()
+
+SetTab:Section({ Title = "🌸 About" })
+
 SetTab:Button({
     Title = "Credits", Icon = "heart", Justify = "Center",
     Callback = function()
-        notify("🌸 Credits","Cherry Blossom Hub\nUI: WindUI by Footagesus\nHealing: Packets.UseBagItem", 5)
+        notify("🌸 Credits","Cherry Blossom Hub\nUI: WindUI (Footagesus)\nHeal: Packets.UseBagItem\nPathfinding: Custom Raycast", 5)
     end,
 })
 SetTab:Space()
