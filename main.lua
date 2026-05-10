@@ -680,7 +680,73 @@ EspTab:Button({
         notify("👁️ Visuals", "All cleared.")
     end,
 })
+---------------------------------------
+AUTO HEAL TAB
+---------------------------------------
+local AUTO_HEAL = true
+local HEAL_PERCENT = 99
+local CPS_SPEED = 500
+local selectedFruit = "Bloodfruit"
 
+local humanoid
+local cachedFruit
+local lastUseTime = 0
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+local Packets = require(ReplicatedStorage.Modules.Packets)
+
+local function setupCharacter(char)
+	humanoid = char:WaitForChild("Humanoid")
+end
+if player.Character then
+	setupCharacter(player.Character)
+end
+player.CharacterAdded:Connect(setupCharacter)
+
+task.spawn(function()
+	while task.wait() do
+		if not AUTO_HEAL then
+			continue
+		end
+		if not humanoid or humanoid.Health <= 0 then
+			continue
+		end
+		local hp = (humanoid.Health / humanoid.MaxHealth) * 100
+		if hp > HEAL_PERCENT then
+			continue
+		end
+		local now = os.clock()
+		if now - lastUseTime < (1 / CPS_SPEED) then
+			continue
+		end
+		local mainGui = player.PlayerGui:FindFirstChild("MainGui")
+		if not mainGui then
+			continue
+		end
+		local inventory = mainGui.RightPanel.Inventory:FindFirstChild("List")
+		if not inventory then
+			continue
+		end
+		if not cachedFruit or not cachedFruit.Parent then
+			for _, item in ipairs(inventory:GetChildren()) do
+				if item:IsA("ImageLabel") and item.Name == selectedFruit then
+					cachedFruit = item
+					break
+				end
+			end
+		end
+		if cachedFruit then
+			local success = pcall(function()
+				Packets.UseBagItem.send(cachedFruit.LayoutOrder)
+			end)
+			if success then
+				lastUseTime = os.clock()
+			end
+		end
+	end
+end)
 -- ============================================================
 -- SETTINGS TAB
 -- ============================================================
