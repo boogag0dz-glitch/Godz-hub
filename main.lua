@@ -19,8 +19,8 @@ local Window = WindUI:CreateWindow({
         Draggable = true,
         OnlyMobile = false,
         Color = ColorSequence.new(
-            Color3.fromRGB(255, 183, 197),
-            Color3.fromRGB(255, 145, 175)
+            Color3.fromRGB(255, 210, 225),
+            Color3.fromRGB(255, 170, 200)
         )
     },
 
@@ -30,9 +30,19 @@ local Window = WindUI:CreateWindow({
     }
 })
 
+pcall(function()
+    WindUI:SetTheme({
+        Accent = Color3.fromRGB(255, 182, 193),
+        Outline = Color3.fromRGB(255, 220, 230),
+        Text = Color3.fromRGB(255, 240, 245),
+        Placeholder = Color3.fromRGB(220, 180, 195),
+        Background = Color3.fromRGB(35, 25, 35)
+    })
+end)
+
 Window:Tag({
     Title = "Blossom",
-    Color = Color3.fromRGB(255, 183, 197),
+    Color = Color3.fromRGB(255, 182, 193),
     Border = true
 })
 
@@ -47,7 +57,7 @@ local Tab = Main:Tab({
 
 Tab:Paragraph({
     Title = "Loaded Successfully",
-    Desc = "Minimal Blossom-themed WindUI loaded."
+    Desc = "Blossom theme applied."
 })
 
 Tab:Button({
@@ -55,7 +65,7 @@ Tab:Button({
     Callback = function()
         WindUI:Notify({
             Title = "Blossom UI",
-            Content = "Everything is working!",
+            Content = "Theme is working!",
             Duration = 3
         })
     end
