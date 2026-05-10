@@ -36,19 +36,24 @@ local FRUIT_LIST = {
 }
 
 -- ============================================================
--- KEYBIND SYSTEM
--- stored as actual Enum.KeyCode values so comparison is direct
+-- KEYBINDS
+-- stored as Enum.KeyCode so comparison is instant
 -- ============================================================
 local Keybinds = {
-    ToggleUI  = Enum.KeyCode.RightShift,
-    Autofarm  = Enum.KeyCode.F1,
-    AutoHeal  = Enum.KeyCode.F2,
-    Pathfind  = Enum.KeyCode.F3,
+    ToggleUI = Enum.KeyCode.RightShift,
+    Autofarm = Enum.KeyCode.F1,
+    AutoHeal = Enum.KeyCode.F2,
+    Pathfind = Enum.KeyCode.F3,
 }
 
--- Human readable name for a KeyCode
 local function keyName(kc)
     return kc and kc.Name or "None"
+end
+
+-- Safe string -> KeyCode converter
+local function toKeyCode(str)
+    local s, kc = pcall(function() return Enum.KeyCode[str] end)
+    return (s and kc) or nil
 end
 
 -- ============================================================
@@ -413,45 +418,31 @@ print("[CherryHub] Window created!")
 
 -- ============================================================
 -- PERSISTENT KEYBIND LISTENER
--- Runs forever outside the window — survives minimize/hide
--- Uses Keybinds table so changing values there takes effect instantly
+-- Window:Toggle() is the correct WindUI method — confirmed from source
+-- This connection lives outside the window so it survives minimize
 -- ============================================================
-local UIOpen = true
-
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     local key = input.KeyCode
 
-    -- Toggle UI
     if key == Keybinds.ToggleUI then
-        UIOpen = not UIOpen
-        -- WindUI's actual toggle method
-        pcall(function()
-            if UIOpen then
-                Window:Open()
-            else
-                Window:Close()
-            end
-        end)
+        pcall(function() Window:Toggle() end)
     end
 
-    -- Autofarm
     if key == Keybinds.Autofarm then
         State.AutofarmOn = not State.AutofarmOn
         if State.AutofarmOn then task.spawn(autofarmLoop) end
-        notify("🌾 Autofarm [" .. keyName(Keybinds.Autofarm) .. "]",
+        notify("🌾 Autofarm ["..keyName(Keybinds.Autofarm).."]",
             State.AutofarmOn and "Started!" or "Stopped.")
     end
 
-    -- Auto Heal
     if key == Keybinds.AutoHeal then
         State.AutoHealOn = not State.AutoHealOn
         cachedFruit = nil
-        notify("🍎 Auto Heal [" .. keyName(Keybinds.AutoHeal) .. "]",
-            State.AutoHealOn and "Active! Using: " .. State.SelectedFruit or "Stopped.")
+        notify("🍎 Auto Heal ["..keyName(Keybinds.AutoHeal).."]",
+            State.AutoHealOn and "Active! Using: "..State.SelectedFruit or "Stopped.")
     end
 
-    -- Pathfinding
     if key == Keybinds.Pathfind then
         State.PathOn = not State.PathOn
         if State.PathOn then
@@ -460,10 +451,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
                 notify("🏃 Pathfinding","Select a target in the UI first!")
             else
                 task.spawn(raycastPathfindLoop)
-                notify("🏃 Pathfinding [" .. keyName(Keybinds.Pathfind) .. "]","Following: " .. State.PathTarget)
+                notify("🏃 Pathfinding ["..keyName(Keybinds.Pathfind).."]","Following: "..State.PathTarget)
             end
         else
-            notify("🏃 Pathfinding [" .. keyName(Keybinds.Pathfind) .. "]","Stopped.")
+            notify("🏃 Pathfinding ["..keyName(Keybinds.Pathfind).."]","Stopped.")
         end
     end
 end)
@@ -483,12 +474,12 @@ local S_Set  = Window:Section({ Title = "⚙️ Settings" })
 local HomeTab = S_Main:Tab({ Title = "Home", Icon = "home", IconColor = Blossom.Pink })
 HomeTab:Paragraph({
     Title = "🌸 Welcome to Cherry Blossom Hub!",
-    Desc  = "Full-featured hub for Booga Booga Reborn.\nHotkeys work even when the UI is closed.",
+    Desc  = "Full-featured hub for Booga Booga Reborn.\nAll hotkeys work even when UI is closed.",
 })
 HomeTab:Space()
 HomeTab:Paragraph({
     Title = "Default Hotkeys",
-    Desc  = "RightShift — Toggle UI\nF1 — Autofarm\nF2 — Auto Heal\nF3 — Pathfinding\n\nChange all of these freely in ⚙️ Settings.",
+    Desc  = "RightShift — Toggle UI\nF1 — Autofarm\nF2 — Auto Heal\nF3 — Pathfinding\n\nChange all of these in ⚙️ Settings.",
 })
 HomeTab:Space()
 HomeTab:Button({
@@ -541,7 +532,7 @@ FarmTab:Button({
         end
         if bestPrompt then
             pcall(function() fireproximityprompt(bestPrompt) end)
-            notify("🌾 Manual Farm","Fired " .. math.floor(bestDist) .. " studs away.")
+            notify("🌾 Manual Farm","Fired "..math.floor(bestDist).." studs away.")
         else
             notify("🌾 Manual Farm","No prompt found nearby.")
         end
@@ -558,12 +549,12 @@ HealTab:Paragraph({
 })
 HealTab:Space()
 HealTab:Dropdown({
-    Title = "Heal Fruit", Desc = "Which fruit to heal with.",
+    Title = "Heal Fruit", Desc = "Which fruit to use.",
     Values = FRUIT_LIST, Value = 1,
     Callback = function(v)
         State.SelectedFruit = v
         cachedFruit = nil
-        notify("🍎 Auto Heal","Fruit set to: " .. v)
+        notify("🍎 Auto Heal","Fruit set to: "..v)
     end,
 })
 HealTab:Space()
@@ -584,7 +575,7 @@ HealTab:Toggle({
     Callback = function(v)
         State.AutoHealOn = v
         cachedFruit = nil
-        notify("🍎 Auto Heal", v and "Active! Using: " .. State.SelectedFruit or "Stopped.")
+        notify("🍎 Auto Heal", v and "Active! Using: "..State.SelectedFruit or "Stopped.")
     end,
 })
 HealTab:Space()
@@ -793,66 +784,62 @@ local SetTab = S_Set:Tab({ Title = "Settings", Icon = "settings", IconColor = Bl
 
 SetTab:Section({ Title = "⌨️ Keybinds" })
 SetTab:Paragraph({
-    Title = "How to change keybinds",
-    Desc  = "Click any keybind box below, then press the key you want.\nTakes effect immediately — works even when UI is closed.",
+    Title = "How to change",
+    Desc  = "Click a keybind box → press any key you want.\nUpdates instantly, works even when UI is closed.",
 })
 SetTab:Space()
 
--- Each Keybind element: clicking it enters listening mode,
--- next key pressed becomes the new bind, updates Keybinds table live.
-
 SetTab:Keybind({
-    Title = "Toggle UI Open / Close",
-    Desc  = "Show or hide the hub window.",
-    Value = keyName(Keybinds.ToggleUI),
+    Title = "Toggle UI",
+    Desc  = "Open or close the hub window. Default: RightShift",
+    Value = "RightShift",
     Callback = function(v)
-        -- WindUI passes the key name as a string
-        local kc = pcall(function() return Enum.KeyCode[v] end) and Enum.KeyCode[v]
+        local kc = toKeyCode(v)
         if kc then
             Keybinds.ToggleUI = kc
-            notify("⌨️ Keybind", "Toggle UI → " .. v)
+            notify("⌨️ Keybind","Toggle UI → "..v)
         end
     end,
 })
 SetTab:Space()
 
 SetTab:Keybind({
-    Title = "Autofarm Toggle",
-    Desc  = "Start / stop autofarm without opening the UI.",
-    Value = keyName(Keybinds.Autofarm),
+    Title = "Autofarm",
+    Desc  = "Toggle autofarm without opening the UI. Default: F1",
+    Value = "F1",
     Callback = function(v)
-        local ok2, kc = pcall(function() return Enum.KeyCode[v] end)
-        if ok2 and kc then
+        local kc = toKeyCode(v)
+        if kc then
             Keybinds.Autofarm = kc
-            notify("⌨️ Keybind", "Autofarm → " .. v)
+            notify("⌨️ Keybind","Autofarm → "..v)
         end
     end,
 })
 SetTab:Space()
 
 SetTab:Keybind({
-    Title = "Auto Heal Toggle",
-    Desc  = "Start / stop auto heal without opening the UI.",
-    Value = keyName(Keybinds.AutoHeal),
+    Title = "Auto Heal",
+    Desc  = "Toggle auto heal without opening the UI. Default: F2",
+    Value = "F2",
     Callback = function(v)
-        local ok2, kc = pcall(function() return Enum.KeyCode[v] end)
-        if ok2 and kc then
+        local kc = toKeyCode(v)
+        if kc then
             Keybinds.AutoHeal = kc
-            notify("⌨️ Keybind", "Auto Heal → " .. v)
+            notify("⌨️ Keybind","Auto Heal → "..v)
         end
     end,
 })
 SetTab:Space()
 
 SetTab:Keybind({
-    Title = "Pathfinding Toggle",
-    Desc  = "Start / stop pathfinding without opening the UI.",
-    Value = keyName(Keybinds.Pathfind),
+    Title = "Pathfinding",
+    Desc  = "Toggle pathfinding without opening the UI. Default: F3",
+    Value = "F3",
     Callback = function(v)
-        local ok2, kc = pcall(function() return Enum.KeyCode[v] end)
-        if ok2 and kc then
+        local kc = toKeyCode(v)
+        if kc then
             Keybinds.Pathfind = kc
-            notify("⌨️ Keybind", "Pathfinding → " .. v)
+            notify("⌨️ Keybind","Pathfinding → "..v)
         end
     end,
 })
