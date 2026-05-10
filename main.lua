@@ -14,6 +14,7 @@ print("[CherryHub] WindUI loaded!")
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService  = game:GetService("UserInputService")
+local RunService        = game:GetService("RunService")
 local LocalPlayer       = Players.LocalPlayer
 local Packets           = require(ReplicatedStorage.Modules.Packets)
 
@@ -37,20 +38,16 @@ local FRUIT_LIST = {
 
 -- ============================================================
 -- KEYBINDS
--- stored as Enum.KeyCode so comparison is instant
 -- ============================================================
 local Keybinds = {
-    ToggleUI = Enum.KeyCode.RightShift,
-    Autofarm = Enum.KeyCode.F1,
-    AutoHeal = Enum.KeyCode.F2,
-    Pathfind = Enum.KeyCode.F3,
+    ToggleUI  = Enum.KeyCode.RightShift,
+    Autofarm  = Enum.KeyCode.F1,
+    AutoHeal  = Enum.KeyCode.F2,
+    Pathfind  = Enum.KeyCode.F3,
+    AutoChest = Enum.KeyCode.F4,
 }
 
-local function keyName(kc)
-    return kc and kc.Name or "None"
-end
-
--- Safe string -> KeyCode converter
+local function keyName(kc) return kc and kc.Name or "None" end
 local function toKeyCode(str)
     local s, kc = pcall(function() return Enum.KeyCode[str] end)
     return (s and kc) or nil
@@ -60,26 +57,34 @@ end
 -- STATE
 -- ============================================================
 local State = {
-    AutoHealOn    = false,
-    HealPercent   = 99,
-    CpsSpeed      = 500,
-    SelectedFruit = "Bloodfruit",
-    AutofarmOn    = false,
-    AutoCollectOn = false,
-    PathOn        = false,
-    PathTarget    = nil,
-    PathInterval  = 0.3,
-    PathStopDist  = 4,
-    SpeedLock     = false,
-    Speed         = 16,
-    Jump          = 50,
-    ESPOn         = false,
-    MobESPOn      = false,
-    TagsOn        = false,
-    ChamsOn       = false,
-    ESPFill       = Color3.fromRGB(255, 150, 170),
-    ESPOutline    = Color3.fromRGB(255, 255, 255),
-    ESPCache      = {},
+    AutoHealOn      = false,
+    HealPercent     = 99,
+    CpsSpeed        = 500,
+    SelectedFruit   = "Bloodfruit",
+    AutofarmOn      = false,
+    AutoCollectOn   = false,
+    PathOn          = false,
+    PathTarget      = nil,
+    PathInterval    = 0.3,
+    PathStopDist    = 4,
+    SpeedLock       = false,
+    Speed           = 16,
+    Jump            = 50,
+    ESPOn           = false,
+    MobESPOn        = false,
+    TagsOn          = false,
+    ChamsOn         = false,
+    ESPFill         = Color3.fromRGB(255, 150, 170),
+    ESPOutline      = Color3.fromRGB(255, 255, 255),
+    ESPCache        = {},
+    -- Auto Chest
+    AutoChestOn     = false,
+    ChestRange      = 30,       -- stud range to watch players
+    ChestFallSpeed  = -10,      -- Y velocity threshold (falling fast enough)
+    ChestHeightMin  = 3,        -- min studs above ground to start watching
+    ChestPlaceHeight = 1.5,     -- how close to ground before placing chest
+    ChestCooldowns  = {},       -- per-player cooldown so we don't spam
+    ChestCooldownTime = 3,      -- seconds before we can chest same player again
 }
 
 -- ============================================================
@@ -102,6 +107,116 @@ LocalPlayer.CharacterAdded:Connect(function()
     task.wait(0.5)
     if State.SpeedLock then applySpeed() end
 end)
+
+-- ============================================================
+-- AUTO CHEST TRAP CORE
+-- ============================================================
+--[[
+    How it works:
+    Every frame (Heartbeat) we scan all players within ChestRange studs.
+    For each enemy player that is:
+      1. In the air (FloorMaterial == Air)
+      2. Falling fast enough (Y velocity <= ChestFallSpeed)
+      3. Close enough to the ground (raycast down, hit within ChestPlaceHeight studs)
+    We fire Packets.PlaceItem (or equivalent) to place a chest at their feet.
+
+    The raycast fires straight down from the target's root to find
+    exactly where the ground is so the chest lands perfectly under them.
+
+    Per-player cooldowns prevent spamming the same player repeatedly.
+--]]
+
+local chestRayParams = RaycastParams.new()
+chestRayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function getGroundDist(root)
+    -- Exclude all player characters from the ray
+    local exclude = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character then table.insert(exclude, p.Character) end
+    end
+    chestRayParams.FilterDescendantsInstances = exclude
+
+    -- Cast straight down 50 studs
+    local result = workspace:Raycast(root.Position, Vector3.new(0, -50, 0), chestRayParams)
+    if result then
+        return root.Position.Y - result.Position.Y, result.Position
+    end
+    return math.huge, nil
+end
+
+local function placeChestAt(position)
+    -- Booga Booga uses Packets to place items
+    -- Try PlaceItem packet with chest item — adjust item name/id if needed
+    pcall(function()
+        Packets.PlaceItem.send({
+            Position = position,
+            ItemName = "Chest",
+        })
+    end)
+    -- Fallback: try generic place packet
+    pcall(function()
+        Packets.PlaceBlock.send({
+            Position = position,
+            Type = "Chest",
+        })
+    end)
+end
+
+-- Track which players are currently being monitored as falling
+local fallingPlayers = {}
+
+local function autoChestLoop()
+    while State.AutoChestOn do
+        local myRoot = getRoot()
+        if myRoot then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character then
+                    local root = p.Character:FindFirstChild("HumanoidRootPart")
+                    local hum  = p.Character:FindFirstChildOfClass("Humanoid")
+
+                    if root and hum then
+                        local dist = (myRoot.Position - root.Position).Magnitude
+
+                        -- Only care about players within range
+                        if dist <= State.ChestRange then
+                            local vel = root.AssemblyLinearVelocity
+                            local isFalling = hum.FloorMaterial == Enum.Material.Air
+                                and vel.Y <= State.ChestFallSpeed
+
+                            -- Check cooldown
+                            local now = tick()
+                            local lastTime = State.ChestCooldowns[p.Name] or 0
+                            local offCooldown = (now - lastTime) >= State.ChestCooldownTime
+
+                            if isFalling and offCooldown then
+                                -- Raycast down to find ground distance
+                                local groundDist, groundPos = getGroundDist(root)
+
+                                -- If they are close enough to the ground, place chest
+                                if groundDist <= State.ChestPlaceHeight and groundPos then
+                                    -- Place chest right at ground level under them
+                                    local chestPos = Vector3.new(
+                                        root.Position.X,
+                                        groundPos.Y,
+                                        root.Position.Z
+                                    )
+
+                                    placeChestAt(chestPos)
+                                    State.ChestCooldowns[p.Name] = now
+
+                                    notify("📦 Auto Chest", "Trapped: " .. p.Name .. "!")
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        -- Run fast so we don't miss the landing window
+        task.wait(0.05)
+    end
+end
 
 -- ============================================================
 -- AUTO HEAL CORE
@@ -269,9 +384,7 @@ local function raycastPathfindLoop()
                     hum:MoveTo(walkTo)
                     if doJump and hum.FloorMaterial ~= Enum.Material.Air then hum.Jump = true end
                     if stuck then task.wait(0.2) hum.Jump = true end
-                else
-                    hum:MoveTo(root.Position)
-                end
+                else hum:MoveTo(root.Position) end
             end
         end
         task.wait(State.PathInterval)
@@ -341,9 +454,6 @@ local function mobEspLoop()
     end
 end
 
--- ============================================================
--- NAME TAGS CORE
--- ============================================================
 local function addNameTag(p)
     if p==LocalPlayer then return end
     local char=p.Character if not char then return end
@@ -418,8 +528,6 @@ print("[CherryHub] Window created!")
 
 -- ============================================================
 -- PERSISTENT KEYBIND LISTENER
--- Window:Toggle() is the correct WindUI method — confirmed from source
--- This connection lives outside the window so it survives minimize
 -- ============================================================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
@@ -428,21 +536,16 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if key == Keybinds.ToggleUI then
         pcall(function() Window:Toggle() end)
     end
-
     if key == Keybinds.Autofarm then
         State.AutofarmOn = not State.AutofarmOn
         if State.AutofarmOn then task.spawn(autofarmLoop) end
-        notify("🌾 Autofarm ["..keyName(Keybinds.Autofarm).."]",
-            State.AutofarmOn and "Started!" or "Stopped.")
+        notify("🌾 Autofarm ["..keyName(Keybinds.Autofarm).."]", State.AutofarmOn and "Started!" or "Stopped.")
     end
-
     if key == Keybinds.AutoHeal then
         State.AutoHealOn = not State.AutoHealOn
         cachedFruit = nil
-        notify("🍎 Auto Heal ["..keyName(Keybinds.AutoHeal).."]",
-            State.AutoHealOn and "Active! Using: "..State.SelectedFruit or "Stopped.")
+        notify("🍎 Auto Heal ["..keyName(Keybinds.AutoHeal).."]", State.AutoHealOn and "Active! Using: "..State.SelectedFruit or "Stopped.")
     end
-
     if key == Keybinds.Pathfind then
         State.PathOn = not State.PathOn
         if State.PathOn then
@@ -457,6 +560,11 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             notify("🏃 Pathfinding ["..keyName(Keybinds.Pathfind).."]","Stopped.")
         end
     end
+    if key == Keybinds.AutoChest then
+        State.AutoChestOn = not State.AutoChestOn
+        if State.AutoChestOn then task.spawn(autoChestLoop) end
+        notify("📦 Auto Chest ["..keyName(Keybinds.AutoChest).."]", State.AutoChestOn and "Active!" or "Stopped.")
+    end
 end)
 
 -- ============================================================
@@ -464,6 +572,7 @@ end)
 -- ============================================================
 local S_Main = Window:Section({ Title = "🌸 Main"     })
 local S_Farm = Window:Section({ Title = "🌾 Farming"  })
+local S_PvP  = Window:Section({ Title = "⚔️ PvP"      })
 local S_Move = Window:Section({ Title = "🏃 Movement" })
 local S_Vis  = Window:Section({ Title = "👁️ Visuals"  })
 local S_Set  = Window:Section({ Title = "⚙️ Settings" })
@@ -479,7 +588,7 @@ HomeTab:Paragraph({
 HomeTab:Space()
 HomeTab:Paragraph({
     Title = "Default Hotkeys",
-    Desc  = "RightShift — Toggle UI\nF1 — Autofarm\nF2 — Auto Heal\nF3 — Pathfinding\n\nChange all of these in ⚙️ Settings.",
+    Desc  = "RightShift — Toggle UI\nF1 — Autofarm\nF2 — Auto Heal\nF3 — Pathfinding\nF4 — Auto Chest Trap\n\nChange all of these in ⚙️ Settings.",
 })
 HomeTab:Space()
 HomeTab:Button({
@@ -491,10 +600,7 @@ HomeTab:Button({
 -- AUTOFARM TAB
 -- ============================================================
 local FarmTab = S_Farm:Tab({ Title = "Autofarm", Icon = "leaf", IconColor = Blossom.Green })
-FarmTab:Paragraph({
-    Title = "Autofarm Info",
-    Desc  = "Walks to and fires the nearest ProximityPrompt every 0.6s.",
-})
+FarmTab:Paragraph({ Title = "Autofarm Info", Desc = "Walks to and fires the nearest ProximityPrompt every 0.6s." })
 FarmTab:Space()
 FarmTab:Toggle({
     Title = "Enable Autofarm", Value = false,
@@ -533,9 +639,7 @@ FarmTab:Button({
         if bestPrompt then
             pcall(function() fireproximityprompt(bestPrompt) end)
             notify("🌾 Manual Farm","Fired "..math.floor(bestDist).." studs away.")
-        else
-            notify("🌾 Manual Farm","No prompt found nearby.")
-        end
+        else notify("🌾 Manual Farm","No prompt found.") end
     end,
 })
 
@@ -543,19 +647,12 @@ FarmTab:Button({
 -- AUTO HEAL TAB
 -- ============================================================
 local HealTab = S_Farm:Tab({ Title = "Auto Heal", Icon = "heart", IconColor = Blossom.Red })
-HealTab:Paragraph({
-    Title = "Auto Heal Info",
-    Desc  = "Uses Packets.UseBagItem to heal from your inventory.\nPick your fruit, set threshold, enable.",
-})
+HealTab:Paragraph({ Title = "Auto Heal Info", Desc = "Uses Packets.UseBagItem to heal from your inventory." })
 HealTab:Space()
 HealTab:Dropdown({
     Title = "Heal Fruit", Desc = "Which fruit to use.",
     Values = FRUIT_LIST, Value = 1,
-    Callback = function(v)
-        State.SelectedFruit = v
-        cachedFruit = nil
-        notify("🍎 Auto Heal","Fruit set to: "..v)
-    end,
+    Callback = function(v) State.SelectedFruit=v cachedFruit=nil notify("🍎 Auto Heal","Fruit: "..v) end,
 })
 HealTab:Space()
 HealTab:Slider({
@@ -565,16 +662,15 @@ HealTab:Slider({
 })
 HealTab:Space()
 HealTab:Slider({
-    Title = "Heal Speed (CPS)", Desc = "Packets per second.",
-    Step = 50, Value = { Min = 50, Max = 1000, Default = 500 },
+    Title = "Heal Speed (CPS)", Step = 50,
+    Value = { Min = 50, Max = 1000, Default = 500 },
     Callback = function(v) State.CpsSpeed = v end,
 })
 HealTab:Space()
 HealTab:Toggle({
     Title = "Enable Auto Heal", Value = false,
     Callback = function(v)
-        State.AutoHealOn = v
-        cachedFruit = nil
+        State.AutoHealOn=v cachedFruit=nil
         notify("🍎 Auto Heal", v and "Active! Using: "..State.SelectedFruit or "Stopped.")
     end,
 })
@@ -601,20 +697,93 @@ HealTab:Button({
         if found then
             local s=pcall(function() Packets.UseBagItem.send(found.LayoutOrder) end)
             notify("🍎 Heal", s and "Used: "..State.SelectedFruit or "Packet failed!")
-        else
-            notify("🍎 Heal", State.SelectedFruit.." not in inventory!")
-        end
+        else notify("🍎 Heal", State.SelectedFruit.." not in inventory!") end
     end,
+})
+
+-- ============================================================
+-- AUTO CHEST TAB (PvP Section)
+-- ============================================================
+local ChestTab = S_PvP:Tab({ Title = "Auto Chest", Icon = "box", IconColor = Blossom.Yellow })
+
+ChestTab:Paragraph({
+    Title = "📦 Auto Chest Trap",
+    Desc  = "Watches nearby players in the air. The moment they are close enough to the ground it fires a place chest packet right under their feet, trapping them on landing.\n\nHotkey: F4 (changeable in Settings)",
+})
+ChestTab:Space()
+
+ChestTab:Toggle({
+    Title = "Enable Auto Chest",
+    Desc  = "Automatically traps falling players with a chest.",
+    Value = false,
+    Callback = function(v)
+        State.AutoChestOn = v
+        if v then
+            State.ChestCooldowns = {} -- reset cooldowns on enable
+            task.spawn(autoChestLoop)
+        end
+        notify("📦 Auto Chest", v and "Active! Watching for falling players." or "Stopped.")
+    end,
+})
+ChestTab:Space()
+
+ChestTab:Slider({
+    Title = "Detection Range (studs)",
+    Desc  = "How far away to watch for falling players.",
+    Step  = 5,
+    Value = { Min = 10, Max = 100, Default = 30 },
+    Callback = function(v) State.ChestRange = v end,
+})
+ChestTab:Space()
+
+ChestTab:Slider({
+    Title = "Fall Speed Threshold",
+    Desc  = "How fast they must be falling (negative = downward). Default: -10.\nLower = triggers sooner, Higher = waits until faster fall.",
+    Step  = 1,
+    Value = { Min = -50, Max = -1, Default = -10 },
+    Callback = function(v) State.ChestFallSpeed = v end,
+})
+ChestTab:Space()
+
+ChestTab:Slider({
+    Title = "Place Height (studs from ground)",
+    Desc  = "How close to the ground they must be before the chest is placed. Lower = more precise, Higher = earlier placement.",
+    Step  = 0.5,
+    Value = { Min = 1, Max = 8, Default = 1.5 },
+    Callback = function(v) State.ChestPlaceHeight = v end,
+})
+ChestTab:Space()
+
+ChestTab:Slider({
+    Title = "Cooldown Per Player (s)",
+    Desc  = "Seconds before the same player can be chested again.",
+    Step  = 0.5,
+    Value = { Min = 0.5, Max = 10, Default = 3 },
+    Callback = function(v) State.ChestCooldownTime = v end,
+})
+ChestTab:Space()
+
+ChestTab:Button({
+    Title = "Reset All Cooldowns",
+    Icon  = "refresh-cw",
+    Justify = "Center",
+    Callback = function()
+        State.ChestCooldowns = {}
+        notify("📦 Auto Chest","All cooldowns reset.")
+    end,
+})
+ChestTab:Space()
+
+ChestTab:Paragraph({
+    Title = "How it works",
+    Desc  = "Every 0.05s the script checks all players within range.\nIf a player is:\n• In the air (FloorMaterial = Air)\n• Falling fast enough (Y vel ≤ threshold)\n• Close enough to the ground (raycast hit)\n→ It fires Packets.PlaceItem with a Chest at their exact landing position.",
 })
 
 -- ============================================================
 -- PATHFINDING TAB
 -- ============================================================
 local PathTab = S_Move:Tab({ Title = "Pathfinding", Icon = "navigation", IconColor = Blossom.Blue })
-PathTab:Paragraph({
-    Title = "Raycast Pathfinding",
-    Desc  = "Steers around obstacles with raycasts.\n• 7 angle probes left & right\n• Jumps obstacles under 3.5 studs\n• Backs up if stuck",
-})
+PathTab:Paragraph({ Title = "Raycast Pathfinding", Desc = "Steers around obstacles with raycasts.\n• 7 angle probes left & right\n• Jumps obstacles under 3.5 studs\n• Backs up if stuck" })
 PathTab:Space()
 local function getPlayerList()
     local t={}
@@ -622,80 +791,51 @@ local function getPlayerList()
     return t
 end
 local PathDrop = PathTab:Dropdown({
-    Title = "Target Player", AllowNone = true,
-    Values = getPlayerList(),
-    Callback = function(v) State.PathTarget = v end,
+    Title="Target Player", AllowNone=true, Values=getPlayerList(),
+    Callback=function(v) State.PathTarget=v end,
 })
 PathTab:Space()
-PathTab:Button({
-    Title = "Refresh Player List", Icon = "refresh-cw", Justify = "Center",
-    Callback = function() PathDrop:Refresh(getPlayerList()) notify("Pathfinding","Refreshed.") end,
-})
+PathTab:Button({ Title="Refresh Player List", Icon="refresh-cw", Justify="Center",
+    Callback=function() PathDrop:Refresh(getPlayerList()) notify("Pathfinding","Refreshed.") end })
 PathTab:Space()
-PathTab:Slider({
-    Title = "Tick Rate (s)", Step = 0.05,
-    Value = { Min = 0.05, Max = 1, Default = 0.3 },
-    Callback = function(v) State.PathInterval = v end,
-})
+PathTab:Slider({ Title="Tick Rate (s)", Step=0.05, Value={Min=0.05,Max=1,Default=0.3},
+    Callback=function(v) State.PathInterval=v end })
 PathTab:Space()
-PathTab:Slider({
-    Title = "Stop Distance (studs)", Step = 1,
-    Value = { Min = 2, Max = 20, Default = 4 },
-    Callback = function(v) State.PathStopDist = v end,
-})
+PathTab:Slider({ Title="Stop Distance (studs)", Step=1, Value={Min=2,Max=20,Default=4},
+    Callback=function(v) State.PathStopDist=v end })
 PathTab:Space()
-PathTab:Toggle({
-    Title = "Enable Pathfinding", Value = false,
-    Callback = function(v)
-        State.PathOn = v
+PathTab:Toggle({ Title="Enable Pathfinding", Value=false,
+    Callback=function(v)
+        State.PathOn=v
         if v then
-            if not State.PathTarget then
-                State.PathOn = false
-                notify("Pathfinding","Select a target first!")
-                return
-            end
+            if not State.PathTarget then State.PathOn=false notify("Pathfinding","Select a target first!") return end
             task.spawn(raycastPathfindLoop)
             notify("🏃 Pathfinding","Following: "..State.PathTarget)
-        else
-            notify("🏃 Pathfinding","Stopped.")
-        end
-    end,
-})
+        else notify("🏃 Pathfinding","Stopped.") end
+    end })
 PathTab:Space()
-PathTab:Button({
-    Title = "Teleport to Target", Icon = "zap", Justify = "Center", Color = Blossom.Blue,
-    Callback = function()
+PathTab:Button({ Title="Teleport to Target", Icon="zap", Justify="Center", Color=Blossom.Blue,
+    Callback=function()
         local t=State.PathTarget and Players:FindFirstChild(State.PathTarget)
         if not t then notify("Teleport","No target selected.") return end
         local tr=t.Character and t.Character:FindFirstChild("HumanoidRootPart")
         local mr=getRoot()
-        if tr and mr then
-            mr.CFrame=tr.CFrame*CFrame.new(0,0,-3)
-            notify("🌸 Teleport","Teleported to "..t.Name.."!")
+        if tr and mr then mr.CFrame=tr.CFrame*CFrame.new(0,0,-3) notify("🌸 Teleport","Teleported to "..t.Name.."!")
         else notify("Teleport","Target not loaded.") end
-    end,
-})
+    end })
 
 -- ============================================================
 -- SPEED TAB
 -- ============================================================
-local SpeedTab = S_Move:Tab({ Title = "Speed", Icon = "wind", IconColor = Blossom.Yellow })
-SpeedTab:Slider({
-    Title = "Walk Speed", Desc = "Default: 16 / Max: 21", Step = 1,
-    Value = { Min = 1, Max = 21, Default = 16 },
-    Callback = function(v) State.Speed=v local h=getHum() if h then h.WalkSpeed=v end end,
-})
+local SpeedTab = S_Move:Tab({ Title="Speed", Icon="wind", IconColor=Blossom.Yellow })
+SpeedTab:Slider({ Title="Walk Speed", Desc="Default: 16 / Max: 21", Step=1, Value={Min=1,Max=21,Default=16},
+    Callback=function(v) State.Speed=v local h=getHum() if h then h.WalkSpeed=v end end })
 SpeedTab:Space()
-SpeedTab:Slider({
-    Title = "Jump Power", Desc = "Default: 50", Step = 1,
-    Value = { Min = 1, Max = 200, Default = 50 },
-    Callback = function(v) State.Jump=v local h=getHum() if h then h.JumpPower=v end end,
-})
+SpeedTab:Slider({ Title="Jump Power", Desc="Default: 50", Step=1, Value={Min=1,Max=200,Default=50},
+    Callback=function(v) State.Jump=v local h=getHum() if h then h.JumpPower=v end end })
 SpeedTab:Space()
-SpeedTab:Toggle({
-    Title = "Speed Lock (Keep on Respawn)", Value = false,
-    Callback = function(v) State.SpeedLock=v notify("Speed Lock", v and "Active." or "Disabled.") end,
-})
+SpeedTab:Toggle({ Title="Speed Lock (Keep on Respawn)", Value=false,
+    Callback=function(v) State.SpeedLock=v notify("Speed Lock",v and"Active."or"Disabled.") end })
 SpeedTab:Space()
 local PGroup=SpeedTab:Group({})
 PGroup:Button({ Title="Default", Justify="Center", Icon="",
@@ -707,15 +847,13 @@ PGroup:Space()
 PGroup:Button({ Title="High Jump", Color=Blossom.Blue, Justify="Center", Icon="",
     Callback=function() State.Jump=120 local h=getHum() if h then h.JumpPower=120 end notify("Speed","Jump 120.") end })
 SpeedTab:Space()
-SpeedTab:Button({
-    Title="Reset All", Icon="refresh-cw", Color=Blossom.Red, Justify="Center",
-    Callback=function() State.Speed=16 State.Jump=50 applySpeed() notify("Speed","All reset.") end,
-})
+SpeedTab:Button({ Title="Reset All", Icon="refresh-cw", Color=Blossom.Red, Justify="Center",
+    Callback=function() State.Speed=16 State.Jump=50 applySpeed() notify("Speed","All reset.") end })
 
 -- ============================================================
 -- ESP TAB
 -- ============================================================
-local EspTab = S_Vis:Tab({ Title = "ESP", Icon = "eye", IconColor = Blossom.Pink })
+local EspTab = S_Vis:Tab({ Title="ESP", Icon="eye", IconColor=Blossom.Pink })
 EspTab:Toggle({ Title="Player ESP", Value=false,
     Callback=function(v) State.ESPOn=v if v then task.spawn(espLoop) else clearAllESP() end notify("👁️ ESP",v and"On!"or"Off.") end })
 EspTab:Space()
@@ -756,8 +894,7 @@ EspTab:Toggle({ Title="Chams", Desc="Makes enemies 40% transparent.", Value=fals
             end
         end)
         notify("👁️ Chams",v and"On!"or"Off.")
-    end,
-})
+    end })
 EspTab:Space()
 EspTab:Button({ Title="Remove All Visuals", Icon="trash", Color=Blossom.Red, Justify="Center",
     Callback=function()
@@ -774,88 +911,35 @@ EspTab:Button({ Title="Remove All Visuals", Icon="trash", Color=Blossom.Red, Jus
             end
         end
         notify("👁️ Visuals","All cleared.")
-    end,
-})
+    end })
 
 -- ============================================================
 -- SETTINGS TAB
 -- ============================================================
-local SetTab = S_Set:Tab({ Title = "Settings", Icon = "settings", IconColor = Blossom.Soft })
-
-SetTab:Section({ Title = "⌨️ Keybinds" })
-SetTab:Paragraph({
-    Title = "How to change",
-    Desc  = "Click a keybind box → press any key you want.\nUpdates instantly, works even when UI is closed.",
-})
+local SetTab = S_Set:Tab({ Title="Settings", Icon="settings", IconColor=Blossom.Soft })
+SetTab:Section({ Title="⌨️ Keybinds" })
+SetTab:Paragraph({ Title="How to change", Desc="Click a box → press any key.\nUpdates instantly, works when UI is closed." })
 SetTab:Space()
-
-SetTab:Keybind({
-    Title = "Toggle UI",
-    Desc  = "Open or close the hub window. Default: RightShift",
-    Value = "RightShift",
-    Callback = function(v)
-        local kc = toKeyCode(v)
-        if kc then
-            Keybinds.ToggleUI = kc
-            notify("⌨️ Keybind","Toggle UI → "..v)
-        end
-    end,
-})
+SetTab:Keybind({ Title="Toggle UI", Desc="Default: RightShift", Value="RightShift",
+    Callback=function(v) local kc=toKeyCode(v) if kc then Keybinds.ToggleUI=kc notify("⌨️","Toggle UI → "..v) end end })
 SetTab:Space()
-
-SetTab:Keybind({
-    Title = "Autofarm",
-    Desc  = "Toggle autofarm without opening the UI. Default: F1",
-    Value = "F1",
-    Callback = function(v)
-        local kc = toKeyCode(v)
-        if kc then
-            Keybinds.Autofarm = kc
-            notify("⌨️ Keybind","Autofarm → "..v)
-        end
-    end,
-})
+SetTab:Keybind({ Title="Autofarm", Desc="Default: F1", Value="F1",
+    Callback=function(v) local kc=toKeyCode(v) if kc then Keybinds.Autofarm=kc notify("⌨️","Autofarm → "..v) end end })
 SetTab:Space()
-
-SetTab:Keybind({
-    Title = "Auto Heal",
-    Desc  = "Toggle auto heal without opening the UI. Default: F2",
-    Value = "F2",
-    Callback = function(v)
-        local kc = toKeyCode(v)
-        if kc then
-            Keybinds.AutoHeal = kc
-            notify("⌨️ Keybind","Auto Heal → "..v)
-        end
-    end,
-})
+SetTab:Keybind({ Title="Auto Heal", Desc="Default: F2", Value="F2",
+    Callback=function(v) local kc=toKeyCode(v) if kc then Keybinds.AutoHeal=kc notify("⌨️","Auto Heal → "..v) end end })
 SetTab:Space()
-
-SetTab:Keybind({
-    Title = "Pathfinding",
-    Desc  = "Toggle pathfinding without opening the UI. Default: F3",
-    Value = "F3",
-    Callback = function(v)
-        local kc = toKeyCode(v)
-        if kc then
-            Keybinds.Pathfind = kc
-            notify("⌨️ Keybind","Pathfinding → "..v)
-        end
-    end,
-})
+SetTab:Keybind({ Title="Pathfinding", Desc="Default: F3", Value="F3",
+    Callback=function(v) local kc=toKeyCode(v) if kc then Keybinds.Pathfind=kc notify("⌨️","Pathfinding → "..v) end end })
 SetTab:Space()
-
-SetTab:Section({ Title = "🌸 About" })
-SetTab:Button({
-    Title = "Credits", Icon = "heart", Justify = "Center",
-    Callback = function()
-        notify("🌸 Credits","Cherry Blossom Hub\nUI: WindUI (Footagesus)\nHeal: Packets.UseBagItem\nPathfinding: Custom Raycast",5)
-    end,
-})
+SetTab:Keybind({ Title="Auto Chest Trap", Desc="Default: F4", Value="F4",
+    Callback=function(v) local kc=toKeyCode(v) if kc then Keybinds.AutoChest=kc notify("⌨️","Auto Chest → "..v) end end })
 SetTab:Space()
-SetTab:Button({
-    Title = "Close UI", Icon = "x", Color = Blossom.Red, Justify = "Center",
-    Callback = function() Window:Destroy() end,
-})
+SetTab:Section({ Title="🌸 About" })
+SetTab:Button({ Title="Credits", Icon="heart", Justify="Center",
+    Callback=function() notify("🌸 Credits","Cherry Blossom Hub\nUI: WindUI\nHeal: Packets.UseBagItem\nPathfinding: Custom Raycast\nAuto Chest: Packets.PlaceItem",5) end })
+SetTab:Space()
+SetTab:Button({ Title="Close UI", Icon="x", Color=Blossom.Red, Justify="Center",
+    Callback=function() Window:Destroy() end })
 
 print("[CherryHub] All tabs loaded! Ready.")
