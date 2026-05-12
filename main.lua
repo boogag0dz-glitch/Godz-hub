@@ -49,82 +49,21 @@ local WALL_LIST = {
 }
 
 -- ============================================================
--- KEYBIND FIXED FOR REAL!
+-- KEYBINDS
 -- ============================================================
-local uiVisible = true
+local Keybinds = {
+    ToggleUI  = Enum.KeyCode.RightShift,
+    Autofarm  = Enum.KeyCode.F1,
+    AutoHeal  = Enum.KeyCode.F2,
+    Pathfind  = Enum.KeyCode.F3,
+    AutoPinch = Enum.KeyCode.F4,
+}
+local function keyName(kc) return kc and kc.Name or "None" end
+local function toKeyCode(str)
+    local s, kc = pcall(function() return Enum.KeyCode[str] end)
+    return (s and kc) or nil
+end
 
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    local key = input.KeyCode
-
-    if key == Keybinds.ToggleUI then
-        pcall(function()
-            uiVisible = not uiVisible
-
-            if uiVisible then
-                if Window.Show then
-                    Window:Show()
-                else
-                    Window:Toggle()
-                end
-                notify("UI", "Opened")
-            else
-                if Window.Hide then
-                    Window:Hide()
-                else
-                    Window:Toggle()
-                end
-                notify("UI", "Hidden")
-            end
-        end)
-        return
-    end
-
-    if key == Keybinds.Autofarm then
-        State.AutofarmOn = not State.AutofarmOn
-        if State.AutofarmOn then task.spawn(autofarmLoop) end
-        notify("Autofarm [" .. keyName(Keybinds.Autofarm) .. "]",
-            State.AutofarmOn and "Started!" or "Stopped.")
-    end
-
-    if key == Keybinds.AutoHeal then
-        State.AutoHealOn = not State.AutoHealOn
-        cachedFruit = nil
-        notify("Auto Heal [" .. keyName(Keybinds.AutoHeal) .. "]",
-            State.AutoHealOn and "Active!" or "Stopped.")
-    end
-
-    if key == Keybinds.Pathfind then
-        State.PathOn = not State.PathOn
-        if State.PathOn then
-            if not State.PathTarget then
-                State.PathOn = false
-                notify("Pathfinding", "Select a target first!")
-                return
-            end
-            task.spawn(raycastPathfindLoop)
-            notify("Pathfinding", "Following: " .. State.PathTarget)
-        else
-            notify("Pathfinding", "Stopped.")
-        end
-    end
-
-    if key == Keybinds.AutoPinch then
-        State.AutoPinchOn = not State.AutoPinchOn
-        if State.AutoPinchOn then
-            if not State.PinchTarget then
-                State.AutoPinchOn = false
-                notify("Auto Pinch", "Select a target first!")
-                return
-            end
-            task.spawn(autoPinchLoop)
-            notify("Auto Pinch [" .. keyName(Keybinds.AutoPinch) .. "]",
-                "Pinching: " .. State.PinchTarget)
-        else
-            notify("Auto Pinch", "Stopped.")
-        end
-    end
-end)
 -- ============================================================
 -- STATE
 -- ============================================================
