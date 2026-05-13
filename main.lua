@@ -191,44 +191,69 @@ end
 -- ============================================================
 -- AUTO HEAL CORE
 -- ============================================================
-local healHumanoid = nil
-local cachedFruit  = nil
-local lastUseTime  = 0
+local AUTO_HEAL = true
+local HEAL_PERCENT = 99
+local CPS_SPEED = 500
+local selectedFruit = "Bloodfruit"
+
+local humanoid
+local cachedFruit
+local lastUseTime = 0
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+local Packets = require(ReplicatedStorage.Modules.Packets)
 
 local function setupCharacter(char)
-    healHumanoid = char:WaitForChild("Humanoid")
-    cachedFruit  = nil
+	humanoid = char:WaitForChild("Humanoid")
 end
-if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
-LocalPlayer.CharacterAdded:Connect(setupCharacter)
+if player.Character then
+	setupCharacter(player.Character)
+end
+player.CharacterAdded:Connect(setupCharacter)
 
 task.spawn(function()
-    while task.wait() do
-        if not State.AutoHealOn then continue end
-        if not healHumanoid or healHumanoid.Health <= 0 then continue end
-        local hp = (healHumanoid.Health / healHumanoid.MaxHealth) * 100
-        if hp > State.HealPercent then continue end
-        local now = os.clock()
-        if now - lastUseTime < (1 / State.CpsSpeed) then continue end
-        local mainGui = LocalPlayer.PlayerGui:FindFirstChild("MainGui")
-        if not mainGui then continue end
-        local inventory = mainGui:FindFirstChild("RightPanel")
-            and mainGui.RightPanel:FindFirstChild("Inventory")
-            and mainGui.RightPanel.Inventory:FindFirstChild("List")
-        if not inventory then continue end
-        if not cachedFruit or not cachedFruit.Parent then
-            cachedFruit = nil
-            for _, item in ipairs(inventory:GetChildren()) do
-                if item:IsA("ImageLabel") and item.Name == State.SelectedFruit then
-                    cachedFruit = item break
-                end
-            end
-        end
-        if cachedFruit then
-            local success = pcall(function() Packets.UseBagItem.send(cachedFruit.LayoutOrder) end)
-            if success then lastUseTime = os.clock() else cachedFruit = nil end
-        end
-    end
+	while task.wait() do
+		if not AUTO_HEAL then
+			continue
+		end
+		if not humanoid or humanoid.Health <= 0 then
+			continue
+		end
+		local hp = (humanoid.Health / humanoid.MaxHealth) * 100
+		if hp > HEAL_PERCENT then
+			continue
+		end
+		local now = os.clock()
+		if now - lastUseTime < (1 / CPS_SPEED) then
+			continue
+		end
+		local mainGui = player.PlayerGui:FindFirstChild("MainGui")
+		if not mainGui then
+			continue
+		end
+		local inventory = mainGui.RightPanel.Inventory:FindFirstChild("List")
+		if not inventory then
+			continue
+		end
+		if not cachedFruit or not cachedFruit.Parent then
+			for _, item in ipairs(inventory:GetChildren()) do
+				if item:IsA("ImageLabel") and item.Name == selectedFruit then
+					cachedFruit = item
+					break
+				end
+			end
+		end
+		if cachedFruit then
+			local success = pcall(function()
+				Packets.UseBagItem.send(cachedFruit.LayoutOrder)
+			end)
+			if success then
+				lastUseTime = os.clock()
+			end
+		end
+	end
 end)
 
 -- ============================================================
