@@ -5,7 +5,7 @@
 local WindUI
 local ok, err = pcall(function()
     WindUI = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"
+        "https://raw.githubusercontent.com/Footagesus/WindUI/main/main.lua"
     ))()
 end)
 if not ok or not WindUI then warn("[CherryHub] WindUI failed: " .. tostring(err)) return end
@@ -470,20 +470,20 @@ end
 -- WINDOW
 -- ============================================================
 local Window = WindUI:CreateWindow({
-    Title         = "🌸 Cherry Blossom Hub",
-    Folder        = "BlossomHub",
-    Icon          = "sparkles",
-    NewElements   = true,
-    HideSearchBar = false,
-    OpenButton    = {
-        Title     = "🌸 Open Hub",
-        Draggable = true,
-        Scale     = 0.55,
-        Color     = ColorSequence.new(Blossom.Pink, Blossom.Soft, Blossom.Light),
-    },
-    Topbar = { Height = 44, ButtonsType = "Mac" },
+    Title            = "🌸 Cherry Blossom Hub",
+    Icon             = "sparkles",
+    Author           = "Booga Booga Reborn",
+    Folder           = "BlossomHub",
+    Size             = UDim2.fromOffset(580, 460),
+    MinSize          = Vector2.new(560, 350),
+    MaxSize          = Vector2.new(850, 560),
+    Transparent      = true,
+    Theme            = "Dark",
+    Resizable        = true,
+    SideBarWidth     = 200,
+    HideSearchBar    = true,
+    ScrollBarEnabled = false,
 })
-Window:Tag({ Title = "Booga Booga Reborn", Color = Blossom.Pink, Border = true })
 print("[CherryHub] Window created!")
 
 
@@ -547,17 +547,17 @@ end)
 -- ============================================================
 -- SECTIONS
 -- ============================================================
-local S_Main   = Window:Section({ Title = "Main"     })
-local S_Farm   = Window:Section({ Title = "Farming"  })
-local S_Combat = Window:Section({ Title = "Combat"   })
-local S_Move   = Window:Section({ Title = "Movement" })
-local S_Vis    = Window:Section({ Title = "Visuals"  })
-local S_Set    = Window:Section({ Title = "Settings" })
+local S_Main   = Window:Tab({ Title = "Main",     Icon = "home",       IconColor = Color3.fromRGB(255,183,197) })
+local S_Farm   = Window:Tab({ Title = "Farming",  Icon = "leaf",       IconColor = Color3.fromRGB(134,239,172) })
+local S_Combat = Window:Tab({ Title = "Combat",   Icon = "zap",        IconColor = Color3.fromRGB(252,165,165) })
+local S_Move   = Window:Tab({ Title = "Movement", Icon = "navigation", IconColor = Color3.fromRGB(147,197,253) })
+local S_Vis    = Window:Tab({ Title = "Visuals",  Icon = "eye",        IconColor = Color3.fromRGB(255,183,197) })
+local S_Set    = Window:Tab({ Title = "Settings", Icon = "settings",   IconColor = Color3.fromRGB(247,198,208) })
 
 -- ============================================================
 -- HOME TAB
 -- ============================================================
-local HomeTab = S_Main:Tab({ Title = "Home", Icon = "home", IconColor = Blossom.Pink })
+local HomeTab = S_Main:Section({ Title = "Home", Icon = "home", IconColor = Blossom.Pink })
 HomeTab:Paragraph({
     Title = "Welcome to Cherry Blossom Hub",
     Desc  = "Full featured hub for Booga Booga Reborn.\nAll hotkeys work even when UI is closed.\nRightShift now directly toggles the ScreenGui so it works reliably every time.",
@@ -578,7 +578,7 @@ HomeTab:Button({
 -- ============================================================
 -- AUTOFARM TAB
 -- ============================================================
-local FarmTab = S_Farm:Tab({ Title = "Autofarm", Icon = "leaf", IconColor = Blossom.Green })
+local FarmTab = S_Farm:Section({ Title = "Autofarm", Icon = "leaf", IconColor = Blossom.Green })
 FarmTab:Paragraph({
     Title = "Autofarm Info",
     Desc  = "Walks to and fires the nearest ProximityPrompt every 0.6s.",
@@ -632,7 +632,7 @@ FarmTab:Button({
 -- ============================================================
 -- AUTO HEAL TAB
 -- ============================================================
-local HealTab = S_Combat:Tab({ Title = "Auto Heal", Icon = "heart", IconColor = Blossom.Red })
+local HealTab = S_Combat:Section({ Title = "Auto Heal", Icon = "heart", IconColor = Blossom.Red })
 HealTab:Paragraph({
     Title = "Auto Heal Info",
     Desc  = "Uses Packets.UseBagItem to heal from inventory.\nDefault hotkey: F2",
@@ -708,7 +708,7 @@ HealTab:Button({
 -- ============================================================
 -- AUTO PINCH TAB
 -- ============================================================
-local PinchTab = S_Combat:Tab({ Title = "Auto Pinch", Icon = "zap", IconColor = Blossom.Purple })
+local PinchTab = S_Combat:Section({ Title = "Auto Pinch", Icon = "zap", IconColor = Blossom.Purple })
 PinchTab:Paragraph({
     Title = "Auto Pinch Info",
     Desc  = "Places two walls in front and behind a target player trapping them.\nSelect target and wall type then enable.\nDefault hotkey: F4",
@@ -791,7 +791,7 @@ PinchTab:Toggle({
 -- ============================================================
 -- PATHFINDING TAB
 -- ============================================================
-local PathTab = S_Move:Tab({ Title = "Pathfinding", Icon = "navigation", IconColor = Blossom.Blue })
+local PathTab = S_Move:Section({ Title = "Pathfinding", Icon = "navigation", IconColor = Blossom.Blue })
 PathTab:Paragraph({
     Title = "Raycast Pathfinding",
     Desc  = "Steers around obstacles using raycasts.\nDefault hotkey: F3",
@@ -869,7 +869,7 @@ PathTab:Button({
 -- ============================================================
 -- SPEED TAB
 -- ============================================================
-local SpeedTab = S_Move:Tab({ Title = "Speed", Icon = "wind", IconColor = Blossom.Yellow })
+local SpeedTab = S_Move:Section({ Title = "Speed", Icon = "wind", IconColor = Blossom.Yellow })
 SpeedTab:Slider({
     Title    = "Walk Speed",
     Desc     = "Default: 16 / Max: 21",
@@ -920,7 +920,7 @@ SpeedTab:Button({
 -- ============================================================
 -- ESP TAB
 -- ============================================================
-local EspTab = S_Vis:Tab({ Title = "ESP", Icon = "eye", IconColor = Blossom.Pink })
+local EspTab = S_Vis:Section({ Title = "ESP", Icon = "eye", IconColor = Blossom.Pink })
 EspTab:Toggle({
     Title = "Player ESP", Desc = "Highlights players through walls.",
     Value = false,
@@ -1022,7 +1022,7 @@ EspTab:Button({
 -- ============================================================
 -- SETTINGS TAB
 -- ============================================================
-local SetTab = S_Set:Tab({ Title = "Settings", Icon = "settings", IconColor = Blossom.Soft })
+local SetTab = S_Set:Section({ Title = "Settings", Icon = "settings", IconColor = Blossom.Soft })
 SetTab:Section({ Title = "Keybinds" })
 SetTab:Paragraph({
     Title = "How to change",
