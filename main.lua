@@ -116,36 +116,10 @@ end)
 -- This works even after minimizing, no re-execution needed
 -- ============================================================
 local UIEnabled = true
-local HubGui    = nil -- will be found after window is created
-
-local function findHubGui()
-    -- Search by folder name we set (BlossomHub)
-    for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
-        if gui:IsA("ScreenGui") and (
-            gui.Name == "BlossomHub" or
-            gui.Name:lower():find("blossom") or
-            gui.Name:lower():find("wind") or
-            gui.Name:lower():find("cherry")
-        ) then
-            return gui
-        end
-    end
-    -- Fallback: return the last ScreenGui added (most likely ours)
-    local guis = LocalPlayer.PlayerGui:GetChildren()
-    for i = #guis, 1, -1 do
-        if guis[i]:IsA("ScreenGui") then
-            return guis[i]
-        end
-    end
-    return nil
-end
+local HubGui    = nil -- set directly from WindUI after window creation
 
 local function toggleUI()
-    -- Find gui if not cached yet
-    if not HubGui or not HubGui.Parent then
-        HubGui = findHubGui()
-    end
-    if HubGui then
+    if HubGui and HubGui.Parent then
         UIEnabled = not UIEnabled
         HubGui.Enabled = UIEnabled
     end
@@ -488,13 +462,56 @@ local Window = WindUI:CreateWindow({
 Window:Tag({ Title = "Booga Booga Reborn", Color = Blossom.Pink, Border = true })
 print("[CherryHub] Window created!")
 
--- Wait a moment then cache the ScreenGui
-task.delay(2, function()
-    HubGui = findHubGui()
+-- Get the ScreenGui directly from WindUI instead of searching PlayerGui
+task.delay(1, function()
+    -- Method 1: WindUI exposes it through Creator
+    pcall(function()
+        local creator = WindUI.Creator
+        if creator and creator.ScreenGui then
+            HubGui = creator.ScreenGui
+            print("[CherryHub] Got ScreenGui from WindUI.Creator")
+        end
+    end)
+
+    -- Method 2: Check WindUI.Main parent chain
+    if not HubGui then
+        pcall(function()
+            local gui = WindUI.Main
+            while gui and not gui:IsA("ScreenGui") do
+                gui = gui.Parent
+            end
+            if gui and gui:IsA("ScreenGui") then
+                HubGui = gui
+                print("[CherryHub] Got ScreenGui from WindUI.Main")
+            end
+        end)
+    end
+
+    -- Method 3: Exclude known game ScreenGuis
+    if not HubGui then
+        local gameGuis = {
+            "MainGui","RegionUI","SecondaryGui","SpawnGui","Toast",
+            "TradeUI","ClanUI","Topbar","vignette","Calendar","CrateUI",
+        }
+        for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") then
+                local isGameGui = false
+                for _, name in ipairs(gameGuis) do
+                    if gui.Name == name then isGameGui = true break end
+                end
+                if not isGameGui then
+                    HubGui = gui
+                    print("[CherryHub] Got ScreenGui by exclusion: " .. gui.Name)
+                    break
+                end
+            end
+        end
+    end
+
     if HubGui then
-        print("[CherryHub] ScreenGui found: " .. HubGui.Name)
+        print("[CherryHub] UI toggle ready: " .. HubGui.Name)
     else
-        print("[CherryHub] ScreenGui not found, toggle may not work")
+        print("[CherryHub] Could not find hub ScreenGui!")
     end
 end)
 
