@@ -57,7 +57,7 @@ end
 -- ============================================================
 local State = {
     AutoHealOn    = false,
-    HealPercent   = 99,
+    HealPercent   = 81,
     CpsSpeed      = 500,
     SelectedFruit = "Bloodfruit",
     AutofarmOn    = false,
