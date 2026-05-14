@@ -111,29 +111,24 @@ LocalPlayer.CharacterAdded:Connect(function()
 end)
 
 -- ============================================================
--- UI TOGGLE SYSTEM
--- UI TOGGLE SYSTEM
--- Captures WindUI ScreenGui via ChildAdded the moment it spawns
+-- UI TOGGLE — captures WindUI ScreenGui via ChildAdded
 -- ============================================================
 local UIEnabled = true
 local HubGui    = nil
 
--- Known Booga Booga ScreenGuis to ignore
 local knownGameGuis = {
     MainGui=true, RegionUI=true, SecondaryGui=true, SpawnGui=true,
     Toast=true, TradeUI=true, ClanUI=true, Topbar=true,
     vignette=true, Calendar=true, CrateUI=true, RobloxGui=true,
 }
 
--- Snapshot guis that exist BEFORE we create our window
 local existingGuis = {}
 for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
     existingGuis[gui] = true
 end
 
--- The MOMENT a new ScreenGui is added that isnt a game gui, thats ours
 LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
-    if HubGui then return end -- already found
+    if HubGui then return end
     if child:IsA("ScreenGui") and not existingGuis[child] and not knownGameGuis[child.Name] then
         HubGui = child
         print("[CherryHub] Hub ScreenGui captured: " .. child.Name)
@@ -145,7 +140,7 @@ local function toggleUI()
         UIEnabled = not UIEnabled
         HubGui.Enabled = UIEnabled
     else
-        print("[CherryHub] HubGui not ready yet")
+        print("[CherryHub] HubGui not ready")
     end
 end
 
@@ -162,24 +157,17 @@ local function autoPinchLoop()
                 local look   = targetRoot.CFrame.LookVector
                 local yAngle = math.atan2(look.X, look.Z)
                 local rot    = CFrame.Angles(0, yAngle, 0)
-
                 local frontCF = CFrame.new(pos + look * State.PinchGap) * rot
                 local backCF  = CFrame.new(pos - look * State.PinchGap) * rot
-
-                -- Fire PlaceStructure RemoteEvent directly
                 task.spawn(function()
                     pcall(function()
-                        ReplicatedStorage.Events.PlaceStructure:FireServer(
-                            State.PinchWall, frontCF
-                        )
+                        ReplicatedStorage.Events.PlaceStructure:FireServer(State.PinchWall, frontCF)
                     end)
                 end)
                 task.wait(0.05)
                 task.spawn(function()
                     pcall(function()
-                        ReplicatedStorage.Events.PlaceStructure:FireServer(
-                            State.PinchWall, backCF
-                        )
+                        ReplicatedStorage.Events.PlaceStructure:FireServer(State.PinchWall, backCF)
                     end)
                 end)
             end
@@ -191,69 +179,44 @@ end
 -- ============================================================
 -- AUTO HEAL CORE
 -- ============================================================
-local AUTO_HEAL = true
-local HEAL_PERCENT = 99
-local CPS_SPEED = 500
-local selectedFruit = "Bloodfruit"
-
-local humanoid
-local cachedFruit
-local lastUseTime = 0
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local player = Players.LocalPlayer
-local Packets = require(ReplicatedStorage.Modules.Packets)
+local healHumanoid = nil
+local cachedFruit  = nil
+local lastUseTime  = 0
 
 local function setupCharacter(char)
-	humanoid = char:WaitForChild("Humanoid")
+    healHumanoid = char:WaitForChild("Humanoid")
+    cachedFruit  = nil
 end
-if player.Character then
-	setupCharacter(player.Character)
-end
-player.CharacterAdded:Connect(setupCharacter)
+if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(setupCharacter)
 
 task.spawn(function()
-	while task.wait() do
-		if not AUTO_HEAL then
-			continue
-		end
-		if not humanoid or humanoid.Health <= 0 then
-			continue
-		end
-		local hp = (humanoid.Health / humanoid.MaxHealth) * 100
-		if hp > HEAL_PERCENT then
-			continue
-		end
-		local now = os.clock()
-		if now - lastUseTime < (1 / CPS_SPEED) then
-			continue
-		end
-		local mainGui = player.PlayerGui:FindFirstChild("MainGui")
-		if not mainGui then
-			continue
-		end
-		local inventory = mainGui.RightPanel.Inventory:FindFirstChild("List")
-		if not inventory then
-			continue
-		end
-		if not cachedFruit or not cachedFruit.Parent then
-			for _, item in ipairs(inventory:GetChildren()) do
-				if item:IsA("ImageLabel") and item.Name == selectedFruit then
-					cachedFruit = item
-					break
-				end
-			end
-		end
-		if cachedFruit then
-			local success = pcall(function()
-				Packets.UseBagItem.send(cachedFruit.LayoutOrder)
-			end)
-			if success then
-				lastUseTime = os.clock()
-			end
-		end
-	end
+    while task.wait() do
+        if not State.AutoHealOn then continue end
+        if not healHumanoid or healHumanoid.Health <= 0 then continue end
+        local hp = (healHumanoid.Health / healHumanoid.MaxHealth) * 100
+        if hp > State.HealPercent then continue end
+        local now = os.clock()
+        if now - lastUseTime < (1 / State.CpsSpeed) then continue end
+        local mainGui = LocalPlayer.PlayerGui:FindFirstChild("MainGui")
+        if not mainGui then continue end
+        local inventory = mainGui:FindFirstChild("RightPanel")
+            and mainGui.RightPanel:FindFirstChild("Inventory")
+            and mainGui.RightPanel.Inventory:FindFirstChild("List")
+        if not inventory then continue end
+        if not cachedFruit or not cachedFruit.Parent then
+            cachedFruit = nil
+            for _, item in ipairs(inventory:GetChildren()) do
+                if item:IsA("ImageLabel") and item.Name == State.SelectedFruit then
+                    cachedFruit = item break
+                end
+            end
+        end
+        if cachedFruit then
+            local success = pcall(function() Packets.UseBagItem.send(cachedFruit.LayoutOrder) end)
+            if success then lastUseTime = os.clock() else cachedFruit = nil end
+        end
+    end
 end)
 
 -- ============================================================
@@ -492,52 +455,45 @@ local function nameTagLoop()
 end
 
 -- ============================================================
--- WINDOW
+-- WINDOW — WindUI v2 correct format
 -- ============================================================
 local Window = WindUI:CreateWindow({
-    Title            = "🌸 Cherry Blossom Hub",
-    Icon             = "sparkles",
-    Author           = "Booga Booga Reborn",
-    Folder           = "BlossomHub",
-    Size             = UDim2.fromOffset(580, 460),
-    MinSize          = Vector2.new(560, 350),
-    MaxSize          = Vector2.new(850, 560),
-    Transparent      = true,
-    Theme            = "Dark",
-    Resizable        = true,
-    SideBarWidth     = 200,
-    HideSearchBar    = true,
+    Title         = "🌸 Cherry Blossom Hub",
+    Icon          = "sparkles",
+    Author        = "Booga Booga Reborn",
+    Folder        = "BlossomHub",
+    Size          = UDim2.fromOffset(580, 460),
+    MinSize       = Vector2.new(560, 350),
+    MaxSize       = Vector2.new(850, 560),
+    Transparent   = true,
+    Theme         = "Dark",
+    Resizable     = true,
+    SideBarWidth  = 200,
+    HideSearchBar = true,
     ScrollBarEnabled = false,
 })
 print("[CherryHub] Window created!")
 
-
-
 -- ============================================================
--- PERSISTENT KEYBIND LISTENER
--- Uses ScreenGui.Enabled toggle — reliable even after minimize
+-- KEYBIND LISTENER
 -- ============================================================
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
     local key = input.KeyCode
 
-    -- Toggle UI using direct ScreenGui.Enabled flip
     if key == Keybinds.ToggleUI then
         toggleUI()
     end
-
     if key == Keybinds.Autofarm then
         State.AutofarmOn = not State.AutofarmOn
         if State.AutofarmOn then task.spawn(autofarmLoop) end
         notify("Autofarm ["..keyName(Keybinds.Autofarm).."]", State.AutofarmOn and "Started!" or "Stopped.")
     end
-
     if key == Keybinds.AutoHeal then
         State.AutoHealOn = not State.AutoHealOn
         cachedFruit = nil
         notify("Auto Heal ["..keyName(Keybinds.AutoHeal).."]", State.AutoHealOn and "Active!" or "Stopped.")
     end
-
     if key == Keybinds.Pathfind then
         State.PathOn = not State.PathOn
         if State.PathOn then
@@ -552,7 +508,6 @@ UserInputService.InputBegan:Connect(function(input, gp)
             notify("Pathfinding", "Stopped.")
         end
     end
-
     if key == Keybinds.AutoPinch then
         State.AutoPinchOn = not State.AutoPinchOn
         if State.AutoPinchOn then
@@ -562,7 +517,7 @@ UserInputService.InputBegan:Connect(function(input, gp)
                 return
             end
             task.spawn(autoPinchLoop)
-            notify("Auto Pinch ["..keyName(Keybinds.AutoPinch).."]", "Pinching: "..State.PinchTarget)
+            notify("Auto Pinch", "Pinching: "..State.PinchTarget)
         else
             notify("Auto Pinch", "Stopped.")
         end
@@ -570,45 +525,32 @@ UserInputService.InputBegan:Connect(function(input, gp)
 end)
 
 -- ============================================================
--- SECTIONS
+-- TABS — WindUI v2: Window:Tab() directly, no sections wrapper
 -- ============================================================
-local S_Main   = Window:Tab({ Title = "Main",     Icon = "home",       IconColor = Color3.fromRGB(255,183,197) })
-local S_Farm   = Window:Tab({ Title = "Farming",  Icon = "leaf",       IconColor = Color3.fromRGB(134,239,172) })
-local S_Combat = Window:Tab({ Title = "Combat",   Icon = "zap",        IconColor = Color3.fromRGB(252,165,165) })
-local S_Move   = Window:Tab({ Title = "Movement", Icon = "navigation", IconColor = Color3.fromRGB(147,197,253) })
-local S_Vis    = Window:Tab({ Title = "Visuals",  Icon = "eye",        IconColor = Color3.fromRGB(255,183,197) })
-local S_Set    = Window:Tab({ Title = "Settings", Icon = "settings",   IconColor = Color3.fromRGB(247,198,208) })
 
--- ============================================================
 -- HOME TAB
--- ============================================================
-local HomeTab = S_Main:Tab({ Title = "Home", Icon = "home", IconColor = Blossom.Pink })
+local HomeTab = Window:Tab({ Title = "Home", Icon = "home" })
 HomeTab:Paragraph({
     Title = "Welcome to Cherry Blossom Hub",
-    Desc  = "Full featured hub for Booga Booga Reborn.\nAll hotkeys work even when UI is closed.\nRightShift now directly toggles the ScreenGui so it works reliably every time.",
+    Desc  = "Full featured hub for Booga Booga Reborn.\nHotkeys work even when UI is closed.",
 })
-HomeTab:Space()
 HomeTab:Paragraph({
     Title = "Default Hotkeys",
     Desc  = "RightShift — Toggle UI\nF1 — Autofarm\nF2 — Auto Heal\nF3 — Pathfinding\nF4 — Auto Pinch\n\nChange all in Settings tab.",
 })
-HomeTab:Space()
 HomeTab:Button({
     Title    = "Show Notification",
     Icon     = "sparkles",
     Justify  = "Center",
-    Callback = function() notify("Cherry Blossom Hub", "Ready! UI toggle fixed.", 4) end,
+    Callback = function() notify("Cherry Blossom Hub", "Ready!", 4) end,
 })
 
--- ============================================================
 -- AUTOFARM TAB
--- ============================================================
-local FarmTab = S_Farm:Tab({ Title = "Autofarm", Icon = "leaf", IconColor = Blossom.Green })
+local FarmTab = Window:Tab({ Title = "Autofarm", Icon = "leaf" })
 FarmTab:Paragraph({
     Title = "Autofarm Info",
     Desc  = "Walks to and fires the nearest ProximityPrompt every 0.6s.",
 })
-FarmTab:Space()
 FarmTab:Toggle({
     Title = "Enable Autofarm", Value = false,
     Callback = function(v)
@@ -617,7 +559,6 @@ FarmTab:Toggle({
         notify("Autofarm", v and "Started!" or "Stopped.")
     end,
 })
-FarmTab:Space()
 FarmTab:Toggle({
     Title = "Auto Collect Drops",
     Desc  = "Teleports to nearby drops within 30 studs.",
@@ -628,7 +569,6 @@ FarmTab:Toggle({
         notify("Auto Collect", v and "On!" or "Off.")
     end,
 })
-FarmTab:Space()
 FarmTab:Button({
     Title    = "Manual Farm",
     Icon     = "zap",
@@ -654,15 +594,12 @@ FarmTab:Button({
     end,
 })
 
--- ============================================================
 -- AUTO HEAL TAB
--- ============================================================
-local HealTab = S_Combat:Tab({ Title = "Auto Heal", Icon = "heart", IconColor = Blossom.Red })
+local HealTab = Window:Tab({ Title = "Auto Heal", Icon = "heart" })
 HealTab:Paragraph({
     Title = "Auto Heal Info",
     Desc  = "Uses Packets.UseBagItem to heal from inventory.\nDefault hotkey: F2",
 })
-HealTab:Space()
 HealTab:Dropdown({
     Title    = "Heal Fruit",
     Desc     = "Which fruit to use for healing.",
@@ -671,24 +608,21 @@ HealTab:Dropdown({
     Callback = function(v)
         State.SelectedFruit = v
         cachedFruit = nil
-        notify("Auto Heal", "Fruit set to: " .. v)
+        notify("Auto Heal", "Fruit: " .. v)
     end,
 })
-HealTab:Space()
 HealTab:Slider({
     Title    = "Heal When HP Below (%)",
     Step     = 1,
     Value    = { Min = 1, Max = 99, Default = 99 },
     Callback = function(v) State.HealPercent = v end,
 })
-HealTab:Space()
 HealTab:Slider({
     Title    = "Heal Speed (CPS)",
     Step     = 50,
     Value    = { Min = 50, Max = 1000, Default = 500 },
     Callback = function(v) State.CpsSpeed = v end,
 })
-HealTab:Space()
 HealTab:Toggle({
     Title    = "Enable Auto Heal",
     Value    = false,
@@ -698,12 +632,10 @@ HealTab:Toggle({
         notify("Auto Heal", v and "Active! Using: "..State.SelectedFruit or "Stopped.")
     end,
 })
-HealTab:Space()
 HealTab:Paragraph({
     Title = "Fruit Guide",
-    Desc  = "Bloodfruit — 4 HP (best PvP)\nFruitcake — 4 HP + 35 food\nCooked Meat — 1 HP + 35 food\nCooked Fish — 1 HP + 20 food\nBerry — 1.5 HP (easy to farm)",
+    Desc  = "Bloodfruit — 4 HP (best PvP)\nFruitcake — 4 HP + 35 food\nCooked Meat — 1 HP + 35 food\nCooked Fish — 1 HP + 20 food\nBerry — 1.5 HP",
 })
-HealTab:Space()
 HealTab:Button({
     Title    = "Heal Now",
     Icon     = "heart",
@@ -730,15 +662,12 @@ HealTab:Button({
     end,
 })
 
--- ============================================================
 -- AUTO PINCH TAB
--- ============================================================
-local PinchTab = S_Combat:Tab({ Title = "Auto Pinch", Icon = "zap", IconColor = Blossom.Purple })
+local PinchTab = Window:Tab({ Title = "Auto Pinch", Icon = "zap" })
 PinchTab:Paragraph({
     Title = "Auto Pinch Info",
-    Desc  = "Places two walls in front and behind a target player trapping them.\nSelect target and wall type then enable.\nDefault hotkey: F4",
+    Desc  = "Places two walls in front and behind a target trapping them.\nDefault hotkey: F4",
 })
-PinchTab:Space()
 
 local function getPlayerList()
     local t = {}
@@ -755,47 +684,40 @@ local PinchDrop = PinchTab:Dropdown({
     AllowNone = true,
     Callback  = function(v) State.PinchTarget = v end,
 })
-PinchTab:Space()
 PinchTab:Button({
     Title    = "Refresh Player List",
     Icon     = "refresh-cw",
     Justify  = "Center",
     Callback = function()
         PinchDrop:Refresh(getPlayerList())
-        notify("Auto Pinch", "Player list refreshed.")
+        notify("Auto Pinch", "Refreshed.")
     end,
 })
-PinchTab:Space()
 PinchTab:Dropdown({
     Title    = "Wall Type",
-    Desc     = "Which wall to use for the pinch.",
+    Desc     = "Which wall to use.",
     Values   = WALL_LIST,
     Value    = 1,
     Callback = function(v)
         State.PinchWall = v
-        notify("Auto Pinch", "Wall set to: " .. v)
+        notify("Auto Pinch", "Wall: " .. v)
     end,
 })
-PinchTab:Space()
 PinchTab:Slider({
     Title    = "Wall Gap (studs)",
-    Desc     = "Distance from target to each wall. Lower = tighter pinch.",
+    Desc     = "Distance from target to each wall.",
     Step     = 0.5,
     Value    = { Min = 1, Max = 6, Default = 2.5 },
     Callback = function(v) State.PinchGap = v end,
 })
-PinchTab:Space()
 PinchTab:Slider({
     Title    = "Re-place Interval (s)",
-    Desc     = "How often walls are re-placed. Lower = more aggressive.",
     Step     = 0.1,
     Value    = { Min = 0.1, Max = 2, Default = 0.3 },
     Callback = function(v) State.PinchInterval = v end,
 })
-PinchTab:Space()
 PinchTab:Toggle({
     Title    = "Enable Auto Pinch",
-    Desc     = "Continuously places walls around the selected player.",
     Value    = false,
     Callback = function(v)
         State.AutoPinchOn = v
@@ -813,22 +735,18 @@ PinchTab:Toggle({
     end,
 })
 
--- ============================================================
 -- PATHFINDING TAB
--- ============================================================
-local PathTab = S_Move:Tab({ Title = "Pathfinding", Icon = "navigation", IconColor = Blossom.Blue })
+local PathTab = Window:Tab({ Title = "Pathfinding", Icon = "navigation" })
 PathTab:Paragraph({
     Title = "Raycast Pathfinding",
     Desc  = "Steers around obstacles using raycasts.\nDefault hotkey: F3",
 })
-PathTab:Space()
 local PathDrop = PathTab:Dropdown({
     Title     = "Target Player",
     Values    = getPlayerList(),
     AllowNone = true,
     Callback  = function(v) State.PathTarget = v end,
 })
-PathTab:Space()
 PathTab:Button({
     Title    = "Refresh Player List",
     Icon     = "refresh-cw",
@@ -838,21 +756,18 @@ PathTab:Button({
         notify("Pathfinding", "Refreshed.")
     end,
 })
-PathTab:Space()
 PathTab:Slider({
     Title    = "Tick Rate (s)",
     Step     = 0.05,
     Value    = { Min = 0.05, Max = 1, Default = 0.3 },
     Callback = function(v) State.PathInterval = v end,
 })
-PathTab:Space()
 PathTab:Slider({
     Title    = "Stop Distance (studs)",
     Step     = 1,
     Value    = { Min = 2, Max = 20, Default = 4 },
     Callback = function(v) State.PathStopDist = v end,
 })
-PathTab:Space()
 PathTab:Toggle({
     Title    = "Enable Pathfinding",
     Value    = false,
@@ -871,7 +786,6 @@ PathTab:Toggle({
         end
     end,
 })
-PathTab:Space()
 PathTab:Button({
     Title    = "Teleport to Target",
     Icon     = "zap",
@@ -891,10 +805,8 @@ PathTab:Button({
     end,
 })
 
--- ============================================================
 -- SPEED TAB
--- ============================================================
-local SpeedTab = S_Move:Tab({ Title = "Speed", Icon = "wind", IconColor = Blossom.Yellow })
+local SpeedTab = Window:Tab({ Title = "Speed", Icon = "wind" })
 SpeedTab:Slider({
     Title    = "Walk Speed",
     Desc     = "Default: 16 / Max: 21",
@@ -902,7 +814,6 @@ SpeedTab:Slider({
     Value    = { Min = 1, Max = 21, Default = 16 },
     Callback = function(v) State.Speed=v local h=getHum() if h then h.WalkSpeed=v end end,
 })
-SpeedTab:Space()
 SpeedTab:Slider({
     Title    = "Jump Power",
     Desc     = "Default: 50",
@@ -910,30 +821,19 @@ SpeedTab:Slider({
     Value    = { Min = 1, Max = 200, Default = 50 },
     Callback = function(v) State.Jump=v local h=getHum() if h then h.JumpPower=v end end,
 })
-SpeedTab:Space()
 SpeedTab:Toggle({
     Title    = "Speed Lock",
     Desc     = "Re-applies speed after every respawn.",
     Value    = false,
     Callback = function(v) State.SpeedLock=v notify("Speed Lock", v and "Active." or "Disabled.") end,
 })
-SpeedTab:Space()
 local PG = SpeedTab:Group({})
-PG:Button({
-    Title = "Default", Justify = "Center", Icon = "",
-    Callback = function() State.Speed=16 State.Jump=50 applySpeed() notify("Speed","Reset.") end,
-})
-PG:Space()
-PG:Button({
-    Title = "Max (21)", Color = Blossom.Green, Justify = "Center", Icon = "",
-    Callback = function() State.Speed=21 local h=getHum() if h then h.WalkSpeed=21 end notify("Speed","Speed 21.") end,
-})
-PG:Space()
-PG:Button({
-    Title = "High Jump", Color = Blossom.Blue, Justify = "Center", Icon = "",
-    Callback = function() State.Jump=120 local h=getHum() if h then h.JumpPower=120 end notify("Speed","Jump 120.") end,
-})
-SpeedTab:Space()
+PG:Button({ Title="Default", Justify="Center", Icon="",
+    Callback=function() State.Speed=16 State.Jump=50 applySpeed() notify("Speed","Reset.") end })
+PG:Button({ Title="Max (21)", Color=Blossom.Green, Justify="Center", Icon="",
+    Callback=function() State.Speed=21 local h=getHum() if h then h.WalkSpeed=21 end notify("Speed","21.") end })
+PG:Button({ Title="High Jump", Color=Blossom.Blue, Justify="Center", Icon="",
+    Callback=function() State.Jump=120 local h=getHum() if h then h.JumpPower=120 end notify("Speed","Jump 120.") end })
 SpeedTab:Button({
     Title    = "Reset All",
     Icon     = "refresh-cw",
@@ -942,10 +842,8 @@ SpeedTab:Button({
     Callback = function() State.Speed=16 State.Jump=50 applySpeed() notify("Speed","All reset.") end,
 })
 
--- ============================================================
 -- ESP TAB
--- ============================================================
-local EspTab = S_Vis:Tab({ Title = "ESP", Icon = "eye", IconColor = Blossom.Pink })
+local EspTab = Window:Tab({ Title = "ESP", Icon = "eye" })
 EspTab:Toggle({
     Title = "Player ESP", Desc = "Highlights players through walls.",
     Value = false,
@@ -955,7 +853,6 @@ EspTab:Toggle({
         notify("ESP", v and "On!" or "Off.")
     end,
 })
-EspTab:Space()
 EspTab:Colorpicker({
     Title = "Fill Color", Default = State.ESPFill,
     Callback = function(c)
@@ -963,7 +860,6 @@ EspTab:Colorpicker({
         for _, h in pairs(State.ESPCache) do if h and h.Parent then h.FillColor = c end end
     end,
 })
-EspTab:Space()
 EspTab:Colorpicker({
     Title = "Outline Color", Default = State.ESPOutline,
     Callback = function(c)
@@ -971,17 +867,14 @@ EspTab:Colorpicker({
         for _, h in pairs(State.ESPCache) do if h and h.Parent then h.OutlineColor = c end end
     end,
 })
-EspTab:Space()
 EspTab:Toggle({
-    Title = "Mob ESP", Desc = "Highlights NPCs and mobs.",
-    Value = false,
+    Title = "Mob ESP", Value = false,
     Callback = function(v)
         State.MobESPOn = v
         if v then task.spawn(mobEspLoop) end
         notify("Mob ESP", v and "On!" or "Off.")
     end,
 })
-EspTab:Space()
 EspTab:Toggle({
     Title = "Name Tags", Desc = "Shows name and health bar above players.",
     Value = false,
@@ -991,7 +884,6 @@ EspTab:Toggle({
         notify("Name Tags", v and "On!" or "Off.")
     end,
 })
-EspTab:Space()
 EspTab:Toggle({
     Title = "Chams", Desc = "Makes enemy parts 40% transparent.",
     Value = false,
@@ -1021,7 +913,6 @@ EspTab:Toggle({
         notify("Chams", v and "On!" or "Off.")
     end,
 })
-EspTab:Space()
 EspTab:Button({
     Title    = "Clear All Visuals",
     Icon     = "trash",
@@ -1044,70 +935,57 @@ EspTab:Button({
     end,
 })
 
--- ============================================================
 -- SETTINGS TAB
--- ============================================================
-local SetTab = S_Set:Tab({ Title = "Settings", Icon = "settings", IconColor = Blossom.Soft })
-SetTab:Section({ Title = "Keybinds" })
+local SetTab = Window:Tab({ Title = "Settings", Icon = "settings" })
 SetTab:Paragraph({
-    Title = "How to change",
-    Desc  = "Click a keybind box then press any key you want.\nTakes effect immediately and works when UI is closed.\nUI toggle uses direct ScreenGui.Enabled flip so it works every time.",
+    Title = "Keybinds",
+    Desc  = "Click a box then press any key.\nWorks even when UI is closed.",
 })
-SetTab:Space()
 SetTab:Keybind({
     Title    = "Toggle UI",
-    Desc     = "Show or hide the hub. Default: RightShift",
+    Desc     = "Default: RightShift",
     Value    = "RightShift",
     Callback = function(v)
         local kc = toKeyCode(v)
-        if kc then
-            Keybinds.ToggleUI = kc
-            notify("Keybind", "Toggle UI set to: " .. v)
-        end
+        if kc then Keybinds.ToggleUI = kc notify("Keybind", "Toggle UI: " .. v) end
     end,
 })
-SetTab:Space()
 SetTab:Keybind({
     Title    = "Autofarm",
-    Desc     = "Toggle autofarm. Default: F1",
+    Desc     = "Default: F1",
     Value    = "F1",
     Callback = function(v)
         local kc = toKeyCode(v)
-        if kc then Keybinds.Autofarm = kc notify("Keybind", "Autofarm set to: " .. v) end
+        if kc then Keybinds.Autofarm = kc notify("Keybind", "Autofarm: " .. v) end
     end,
 })
-SetTab:Space()
 SetTab:Keybind({
     Title    = "Auto Heal",
-    Desc     = "Toggle auto heal. Default: F2",
+    Desc     = "Default: F2",
     Value    = "F2",
     Callback = function(v)
         local kc = toKeyCode(v)
-        if kc then Keybinds.AutoHeal = kc notify("Keybind", "Auto Heal set to: " .. v) end
+        if kc then Keybinds.AutoHeal = kc notify("Keybind", "Auto Heal: " .. v) end
     end,
 })
-SetTab:Space()
 SetTab:Keybind({
     Title    = "Pathfinding",
-    Desc     = "Toggle pathfinding. Default: F3",
+    Desc     = "Default: F3",
     Value    = "F3",
     Callback = function(v)
         local kc = toKeyCode(v)
-        if kc then Keybinds.Pathfind = kc notify("Keybind", "Pathfinding set to: " .. v) end
+        if kc then Keybinds.Pathfind = kc notify("Keybind", "Pathfinding: " .. v) end
     end,
 })
-SetTab:Space()
 SetTab:Keybind({
     Title    = "Auto Pinch",
-    Desc     = "Toggle auto pinch. Default: F4",
+    Desc     = "Default: F4",
     Value    = "F4",
     Callback = function(v)
         local kc = toKeyCode(v)
-        if kc then Keybinds.AutoPinch = kc notify("Keybind", "Auto Pinch set to: " .. v) end
+        if kc then Keybinds.AutoPinch = kc notify("Keybind", "Auto Pinch: " .. v) end
     end,
 })
-SetTab:Space()
-SetTab:Section({ Title = "About" })
 SetTab:Button({
     Title    = "Credits",
     Icon     = "heart",
@@ -1116,7 +994,6 @@ SetTab:Button({
         notify("Credits", "Cherry Blossom Hub\nUI: WindUI by Footagesus\nHeal: Packets.UseBagItem\nPathfinding: Custom Raycast", 5)
     end,
 })
-SetTab:Space()
 SetTab:Button({
     Title    = "Close UI",
     Icon     = "x",
