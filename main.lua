@@ -11,7 +11,10 @@ local KeySystem = {
     FileName = "CherryBlossomKey.json",
     Discord = "https://discord.gg/aaJfDTFu",
     Lootlabs = "https://lootdest.org/s?dFqzcoYK",
-    Linkvertise = "https://direct-link.net/5922287/O8ngvbuGlYXB",
+    Linkvertise = "https://link-target.net/5922287/Ua3185mHsUrX",
+                  "https://link-center.net/5922287/AoMhDFSEPbpg",
+                  "https://link-hub.net/5922287/cOxXb3ZcMgJg",
+                  "https://link-center.net/5922287/4TDRS4HEPDHL",
     KeysURL = "https://raw.githubusercontent.com/boogag0dz-glitch/Godz-hub/refs/heads/main/keys.txt",
     ExpireHours = 24
 }
@@ -52,13 +55,33 @@ local function loadKey()
     return nil
 end
 
-local function checkKey(key)
+local function cleanKey(key)
+    return tostring(key or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function checkKey(inputKey)
+    inputKey = cleanKey(inputKey)
+
+    if inputKey == "" then
+        return false
+    end
+
+    local url = KeySystem.KeysURL .. "?t=" .. tostring(os.time())
+
     local success, response = pcall(function()
-        return game:HttpGet(KeySystem.KeysURL)
+        return game:HttpGet(url)
     end)
 
-    if success and response then
-        return string.find(response, key) ~= nil
+    if not success or not response then
+        return false
+    end
+
+    for line in response:gmatch("[^\r\n]+") do
+        local validKey = cleanKey(line)
+
+        if validKey ~= "" and inputKey == validKey then
+            return true
+        end
     end
 
     return false
@@ -73,7 +96,6 @@ if SavedKey and checkKey(SavedKey) then
         Duration = 3
     })
 else
-    local GeneratedKey = randomKey()
 
     local Window = WindUI:CreateWindow({
         Title = "Cherry Blossom Key System",
@@ -108,19 +130,21 @@ else
             })
         end
     })
+Tab:Button({
+    Title = "Get Key (Linkvertise)",
+    Callback = function()
+        local links = KeySystem.KeyLinks
+        local randomLink = links[math.random(1, #links)]
 
-    Tab:Button({
-        Title = "Get Key (Linkvertise)",
-        Callback = function()
-            setclipboard(KeySystem.Linkvertise)
-            WindUI:Notify({
-                Title = "Linkvertise",
-                Content = "Link copied to clipboard",
-                Duration = 3
-            })
-        end
-    })
+        setclipboard(randomLink)
 
+        WindUI:Notify({
+            Title = "Linkvertise",
+            Content = "Random key link copied to clipboard",
+            Duration = 3
+        })
+    end
+})
     Tab:Button({
         Title = "Join Discord",
         Callback = function()
