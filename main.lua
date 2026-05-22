@@ -11,15 +11,16 @@ local KeySystem = {
     FileName = "CherryBlossomKey.json",
     Discord = "https://discord.gg/aaJfDTFu",
     Lootlabs = "https://lootdest.org/s?dFqzcoYK",
+
     KeyLinks = {
-    "https://link-hub.net/5922287/4cjB3yH9UKrl",
-    "https://direct-link.net/5922287/O8ngvbuGlYXB",
-    "https://link-target.net/5922287/Ua3l85mHsUrX",
-    "https://link-center.net/5922287/AoMhDFSEPbpg",
-    "https://link-hub.net/5922287/cOxXb3ZcMgJg",
-    "https://link-center.net/5922287/4TDRS4HEPDHL",
-},
-},
+        "https://link-hub.net/5922287/4cjB3yH9UKrl",
+        "https://direct-link.net/5922287/O8ngvbuGlYXB",
+        "https://link-target.net/5922287/Ua3l85mHsUrX",
+        "https://link-center.net/5922287/AoMhDFSEPbpg",
+        "https://link-hub.net/5922287/cOxXb3ZcMgJg",
+        "https://link-center.net/5922287/4TDRS4HEPDHL",
+    },
+
     KeysURL = "https://raw.githubusercontent.com/boogag0dz-glitch/Godz-hub/refs/heads/main/keys.txt",
     ExpireHours = 24
 }
@@ -156,14 +157,14 @@ Tab:Button({
             setclipboard(randomLink)
             WindUI:Notify({
                 Title = "Linkvertise",
-                Content = "Random key link copied",
+                Content = "Random key link copied to clipboard",
                 Duration = 3
             })
         else
             WindUI:Notify({
                 Title = "Clipboard Error",
-                Content = "Your executor does not support setclipboard",
-                Duration = 5
+                Content = randomLink,
+                Duration = 8
             })
         end
     end
