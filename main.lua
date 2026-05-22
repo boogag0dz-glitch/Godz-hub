@@ -3,22 +3,18 @@
 local WindUI = loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"
 ))()
-
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService  = game:GetService("UserInputService")
 local RunService        = game:GetService("RunService")
 local LocalPlayer       = Players.LocalPlayer
-
 local packetsModule = ReplicatedStorage:WaitForChild("Modules", 30)
     and ReplicatedStorage.Modules:WaitForChild("Packets", 30)
 if not packetsModule then
     warn("[Cherry Blossom Hub] Packets module not found.")
     return
 end
-
 local Packets = require(packetsModule)
-
 local Blossom = {
     Pink   = Color3.fromRGB(255, 183, 197),
     Soft   = Color3.fromRGB(247, 198, 208),
@@ -29,23 +25,38 @@ local Blossom = {
     Red    = Color3.fromRGB(252, 165, 165),
     Purple = Color3.fromRGB(196, 181, 253),
 }
-
 local FRUIT_LIST = {
     "Bloodfruit", "Fruitcake", "Cooked Meat", "Cooked Fish",
     "Berry", "Cloudberry", "Frostfruit", "Blossom",
     "Mango", "Watermelon", "Orange", "Lemon",
     "Apple", "Strawberry", "Bluefruit", "Yellowfruit", "Pinefruit",
 }
-
 local WALL_LIST = {
     "Wood Wall", "Iron Wall", "Stone Wall", "Ice Wall",
     "Adurite Wall", "Crystal Wall", "Magnetite Wall",
     "Emerald Wall", "Carrot Crystal Wall",
 }
-
 local SCAN_FOLDERS = { "Resources", "Items", "Plants", "Nodes", "Harvest" }
 local PROMPT_SCAN_RADIUS = 150
-
+local ENTITY_ROOT_FOLDERS = { "Players", "Resources", "Items", "Characters", "Mobs" }
+local PICKUP_ITEM_LIST = {
+    "Log", "Wood", "Leaves", "Stone", "Ice Cubes", "Obsidian", "Rubble", "Coal",
+    "Iron", "Silver", "Gold", "Crystal", "Magnetite", "Emerald", "Adurite",
+    "Uncut Iron", "Uncut Silver", "Uncut Gold", "Uncut Crystal", "Uncut Magnetite",
+    "Uncut Emerald", "Uncut Adurite", "Carrot Crystal", "Ice Crystal",
+    "Berry", "Bloodfruit", "Cloudberry", "Frostfruit", "Blossom", "Mango",
+    "Watermelon", "Orange", "Lemon", "Apple", "Strawberry", "Bluefruit",
+    "Yellowfruit", "Pinefruit", "Fruitcake",
+    "Raw Meat", "Cooked Meat", "Raw Fish", "Cooked Fish",
+    "Bone", "Wool", "Feather", "Egg", "Honey", "Milk", "Hide", "Leather",
+    "Rock", "Club", "Mace", "Spear", "Battle Axe", "Bow", "Arrow", "Crossbow",
+    "Wood Axe", "Wood Pick", "Stone Axe", "Stone Pick", "Iron Axe", "Iron Pick",
+    "Crystal Axe", "Crystal Pick", "Magnetite Axe", "Magnetite Pick",
+    "Emerald Axe", "Emerald Pick", "Adurite Axe", "Adurite Pick",
+    "God Axe", "God Pick", "God Sword", "God Hammer",
+    "Coin", "Coins", "Spirit", "Bag", "Leaf Bag", "Spirit Bag",
+    "Peeper Popsicle", "Easter Egg", "Basket",
+}
 local Keybinds = {
     ToggleUI  = Enum.KeyCode.RightShift,
     Autofarm  = Enum.KeyCode.F1,
@@ -54,18 +65,15 @@ local Keybinds = {
     AutoPinch = Enum.KeyCode.F4,
     KillAura  = Enum.KeyCode.F5,
 }
-
 local function keyName(kc)
     return kc and kc.Name or "None"
 end
-
 local function toKeyCode(str)
     local ok, kc = pcall(function()
         return Enum.KeyCode[str]
     end)
     return (ok and kc) or nil
 end
-
 local State = {
     AutoHealOn       = false,
     HealPercent      = 99,
@@ -102,8 +110,11 @@ local State = {
     ResourceTargets      = 5,
     ResourceRequireTool  = true,
     ResourceEquipPause   = 2,
+    PickupFilterOn       = true,
+    PickupWhitelistAll   = false,
+    PickupWhitelist      = {},
+    PickupRange          = 40,
 }
-
 local LoopRunning = {
     Autofarm      = false,
     AutoCollect   = false,
@@ -116,23 +127,18 @@ local LoopRunning = {
     NameTags      = false,
     Chams         = false,
 }
-
 local UiToggles = {}
-
 local function getChar()
     return LocalPlayer.Character
 end
-
 local function getHum()
     local c = getChar()
     return c and c:FindFirstChildOfClass("Humanoid")
 end
-
 local function getRoot()
     local c = getChar()
     return c and c:FindFirstChild("HumanoidRootPart")
 end
-
 local function getEquippedTool()
     local char = getChar()
     if not char then
@@ -145,24 +151,250 @@ local function getEquippedTool()
     end
     return nil
 end
-
 local resourceAuraPauseUntil = 0
-
 local function pauseResourceAura(seconds)
     resourceAuraPauseUntil = os.clock() + (seconds or State.ResourceEquipPause)
 end
-
+local function getEntityID(inst)
+    if not inst then
+        return nil
+    end
+    local id = inst:GetAttribute("EntityID")
+    if id ~= nil then
+        return id
+    end
+    local current = inst.Parent
+    while current and current ~= workspace do
+        id = current:GetAttribute("EntityID")
+        if id ~= nil then
+            return id
+        end
+        current = current.Parent
+    end
+    return nil
+end
+local function getEntityPart(inst)
+    if not inst then
+        return nil
+    end
+    if inst:IsA("BasePart") then
+        return inst
+    end
+    if inst:IsA("Model") then
+        return inst.PrimaryPart
+            or inst:FindFirstChild("HumanoidRootPart")
+            or inst:FindFirstChild("Item")
+            or inst:FindFirstChildWhichIsA("BasePart")
+    end
+    return inst:FindFirstChildWhichIsA("BasePart")
+end
+local function isPlayerEntity(inst)
+    local playersFolder = workspace:FindFirstChild("Players")
+    if playersFolder and inst:IsDescendantOf(playersFolder) then
+        return true
+    end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character and inst:IsDescendantOf(player.Character) then
+            return true
+        end
+    end
+    return false
+end
+local function swingAtEntityID(entityID)
+    if entityID == nil then
+        return false
+    end
+    local id = typeof(entityID) == "number" and entityID or tonumber(entityID) or entityID
+    local ok = false
+    ok = pcall(function()
+        Packets.SwingTool.send(id)
+    end) or ok
+    if not ok then
+        ok = pcall(function()
+            Packets.SwingTool.send({ id })
+        end) or ok
+    end
+    if not ok then
+        ok = pcall(function()
+            Packets.SwingTool.send({ entityID = id })
+        end) or ok
+    end
+    return ok
+end
+local function addSwingTarget(targets, seen, part, entityID, origin, maxRange)
+    local key = tostring(entityID)
+    if seen[key] or not part or not entityID then
+        return
+    end
+    local dist = (part.Position - origin).Magnitude
+    if dist > maxRange then
+        return
+    end
+    seen[key] = true
+    table.insert(targets, { eid = entityID, dist = dist })
+end
+local function getPlayerSwingTargets(origin, maxRange)
+    local targets, seen = {}, {}
+    local playersFolder = workspace:FindFirstChild("Players")
+    if playersFolder then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local entity = playersFolder:FindFirstChild(player.Name)
+                if entity then
+                    local part = getEntityPart(entity)
+                    local entityID = getEntityID(entity) or (part and getEntityID(part))
+                    addSwingTarget(targets, seen, part, entityID, origin, maxRange)
+                end
+            end
+        end
+    end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local part = getEntityPart(player.Character)
+            local entityID = getEntityID(player.Character) or (part and getEntityID(part))
+            addSwingTarget(targets, seen, part, entityID, origin, maxRange)
+        end
+    end
+    table.sort(targets, function(a, b)
+        return a.dist < b.dist
+    end)
+    return targets
+end
+local function getResourceSwingTargets(origin, maxRange)
+    local targets, seen = {}, {}
+    local resourcesFolder = workspace:FindFirstChild("Resources")
+    if resourcesFolder then
+        for _, desc in ipairs(resourcesFolder:GetDescendants()) do
+            if not isPlayerEntity(desc) then
+                local entityID = getEntityID(desc)
+                local part = getEntityPart(desc)
+                if entityID and part then
+                    addSwingTarget(targets, seen, part, entityID, origin, maxRange)
+                end
+            end
+        end
+    end
+    for _, folderName in ipairs({ "Harvest", "Nodes", "Plants" }) do
+        local folder = workspace:FindFirstChild(folderName)
+        if folder then
+            for _, desc in ipairs(folder:GetDescendants()) do
+                if not isPlayerEntity(desc) then
+                    local entityID = getEntityID(desc)
+                    local part = getEntityPart(desc)
+                    if entityID and part then
+                        addSwingTarget(targets, seen, part, entityID, origin, maxRange)
+                    end
+                end
+            end
+        end
+    end
+    table.sort(targets, function(a, b)
+        return a.dist < b.dist
+    end)
+    return targets
+end
+local function swingOnTargets(targets, maxCount)
+    for i = 1, math.min(maxCount, #targets) do
+        swingAtEntityID(targets[i].eid)
+    end
+end
+local function shouldPickupItem(itemName)
+    if not State.PickupFilterOn then
+        return true
+    end
+    if State.PickupWhitelistAll then
+        return true
+    end
+    return State.PickupWhitelist[itemName] == true
+end
+local function pickupDrop(drop)
+    local entityID = getEntityID(drop)
+    if not entityID then
+        return false
+    end
+    local ok = false
+    ok = pcall(function()
+        Packets.Pickup.send(entityID)
+    end) or ok
+    if not ok then
+        local events = ReplicatedStorage:FindFirstChild("Events")
+        if events then
+            local pickupItem = events:FindFirstChild("PickupItem")
+            local pickup = events:FindFirstChild("Pickup")
+            if pickupItem then
+                ok = pcall(function()
+                    pickupItem:InvokeServer(drop)
+                end) or ok
+            elseif pickup then
+                local part = drop:FindFirstChild("Item") or getEntityPart(drop)
+                if part then
+                    ok = pcall(function()
+                        pickup:FireServer(part)
+                    end) or ok
+                end
+            end
+        end
+    end
+    return ok
+end
+local function getPickupListText()
+    if State.PickupWhitelistAll then
+        return "Picking up: ALL items"
+    end
+    local names = {}
+    for name in pairs(State.PickupWhitelist) do
+        table.insert(names, name)
+    end
+    table.sort(names)
+    if #names == 0 then
+        return "No items selected — add items below"
+    end
+    if #names <= 6 then
+        return "Picking up: " .. table.concat(names, ", ")
+    end
+    return "Picking up " .. #names .. " items (first: " .. names[1] .. ", ...)"
+end
+local function mergePickupNamesFromGame()
+    local seen, merged = {}, {}
+    for _, name in ipairs(PICKUP_ITEM_LIST) do
+        if not seen[name] then
+            seen[name] = true
+            table.insert(merged, name)
+        end
+    end
+    local itemsFolder = workspace:FindFirstChild("Items")
+    if itemsFolder then
+        for _, drop in ipairs(itemsFolder:GetChildren()) do
+            if not seen[drop.Name] then
+                seen[drop.Name] = true
+                table.insert(merged, drop.Name)
+            end
+        end
+    end
+    table.sort(merged)
+    return merged
+end
+local function updatePickupStatus(paragraph)
+    if not paragraph then
+        return
+    end
+    pcall(function()
+        if paragraph.SetDesc then
+            paragraph:SetDesc(getPickupListText())
+        elseif paragraph.Set then
+            paragraph:Set({ Desc = getPickupListText() })
+        end
+    end)
+end
 local function bindToolEquipPause(char)
     local backpack = LocalPlayer:FindFirstChild("Backpack")
         or LocalPlayer:WaitForChild("Backpack", 5)
     if not backpack then
         return
     end
-
     local function onEquipActivity()
         pauseResourceAura(State.ResourceEquipPause)
     end
-
     char.ChildAdded:Connect(function(child)
         if child:IsA("Tool") then
             onEquipActivity()
@@ -179,13 +411,11 @@ local function bindToolEquipPause(char)
         end
     end)
 end
-
 local function notify(title, msg, dur)
     pcall(function()
         WindUI:Notify({ Title = title, Content = msg, Duration = dur or 3 })
     end)
 end
-
 local function applySpeed()
     local h = getHum()
     if h then
@@ -193,7 +423,6 @@ local function applySpeed()
         h.JumpPower = State.Jump
     end
 end
-
 local function setUiToggle(key, value)
     local el = UiToggles[key]
     if not el then
@@ -207,7 +436,6 @@ local function setUiToggle(key, value)
         end
     end)
 end
-
 local function startLoop(name, fn)
     if LoopRunning[name] then
         return
@@ -218,11 +446,9 @@ local function startLoop(name, fn)
         LoopRunning[name] = false
     end)
 end
-
 local function findNearestPrompt(root)
     local best, bestDist, bestPrompt = nil, math.huge, nil
     local rootPos = root.Position
-
     local function consider(obj)
         if not obj:IsA("ProximityPrompt") then
             return
@@ -237,7 +463,6 @@ local function findNearestPrompt(root)
             end
         end
     end
-
     for _, folderName in ipairs(SCAN_FOLDERS) do
         local folder = workspace:FindFirstChild(folderName)
         if folder then
@@ -246,20 +471,16 @@ local function findNearestPrompt(root)
             end
         end
     end
-
     if not bestPrompt then
         for _, desc in ipairs(workspace:GetDescendants()) do
             consider(desc)
         end
     end
-
     return best, bestDist, bestPrompt
 end
-
 local healHumanoid = nil
 local cachedFruit = nil
 local lastUseTime = 0
-
 LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(0.5)
     bindToolEquipPause(char)
@@ -267,20 +488,16 @@ LocalPlayer.CharacterAdded:Connect(function(char)
         applySpeed()
     end
 end)
-
 if LocalPlayer.Character then
     bindToolEquipPause(LocalPlayer.Character)
 end
-
 local UIEnabled = true
 local HubGui = nil
-
 local knownGameGuis = {
     MainGui = true, RegionUI = true, SecondaryGui = true, SpawnGui = true,
     Toast = true, TradeUI = true, ClanUI = true, Topbar = true,
     vignette = true, Calendar = true, CrateUI = true, RobloxGui = true,
 }
-
 local function bindHubGui()
     if HubGui and HubGui.Parent then
         return
@@ -292,7 +509,6 @@ local function bindHubGui()
         end
     end
 end
-
 local function toggleUI()
     bindHubGui()
     if HubGui and HubGui.Parent then
@@ -300,10 +516,8 @@ local function toggleUI()
         HubGui.Enabled = UIEnabled
     end
 end
-
 local pinchParams = RaycastParams.new()
 pinchParams.FilterType = Enum.RaycastFilterType.Exclude
-
 local function doPinch(targetHRP, wallName)
     local chars = {}
     for _, p in pairs(Players:GetPlayers()) do
@@ -312,7 +526,6 @@ local function doPinch(targetHRP, wallName)
         end
     end
     pinchParams.FilterDescendantsInstances = chars
-
     for _, v in pairs({ 2, -2 }) do
         local pos = targetHRP.Position + (targetHRP.CFrame.RightVector * v)
         local ray = workspace:Raycast(
@@ -331,7 +544,6 @@ local function doPinch(targetHRP, wallName)
         task.wait(0.1)
     end
 end
-
 local function autoPinchLoop()
     while State.AutoPinchOn do
         local target = State.PinchTarget and Players:FindFirstChild(State.PinchTarget)
@@ -344,45 +556,16 @@ local function autoPinchLoop()
         task.wait(State.PinchInterval)
     end
 end
-
 local function killAuraLoop()
     while State.KillAuraOn do
         local root = getRoot()
         if root then
-            local targets = {}
-            local workspacePlayers = workspace:FindFirstChild("Players")
-            if workspacePlayers then
-                for _, player in pairs(Players:GetPlayers()) do
-                    if player ~= LocalPlayer then
-                        local pFolder = workspacePlayers:FindFirstChild(player.Name)
-                        if pFolder then
-                            local rootPart = pFolder:FindFirstChild("HumanoidRootPart")
-                            local entityID = pFolder:GetAttribute("EntityID")
-                            if rootPart and entityID then
-                                local dist = (rootPart.Position - root.Position).Magnitude
-                                if dist <= State.KillAuraRange then
-                                    table.insert(targets, { eid = entityID, dist = dist })
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-            if #targets > 0 then
-                table.sort(targets, function(a, b)
-                    return a.dist < b.dist
-                end)
-                for i = 1, math.min(State.KillAuraTargets, #targets) do
-                    pcall(function()
-                        Packets.SwingTool.send(targets[i].eid)
-                    end)
-                end
-            end
+            local targets = getPlayerSwingTargets(root.Position, State.KillAuraRange)
+            swingOnTargets(targets, State.KillAuraTargets)
         end
         task.wait(State.KillAuraCooldown)
     end
 end
-
 local function resourceAuraLoop()
     while State.ResourceAuraOn do
         local canSwing = os.clock() >= resourceAuraPauseUntil
@@ -392,54 +575,24 @@ local function resourceAuraLoop()
         elseif not canSwing then
             task.wait(0.1)
         end
-
         if canSwing then
             local root = getRoot()
             if root then
-                local targets = {}
-                local resourceFolder = workspace:FindFirstChild("Resources")
-                if resourceFolder then
-                    for _, res in pairs(resourceFolder:GetChildren()) do
-                        if res:IsA("Model") and res:GetAttribute("EntityID") then
-                            local ppart = res.PrimaryPart or res:FindFirstChildWhichIsA("BasePart")
-                            if ppart then
-                                local dist = (ppart.Position - root.Position).Magnitude
-                                if dist <= State.ResourceRange then
-                                    table.insert(targets, {
-                                        eid = res:GetAttribute("EntityID"),
-                                        dist = dist,
-                                    })
-                                end
-                            end
-                        end
-                    end
-                end
-                if #targets > 0 then
-                    table.sort(targets, function(a, b)
-                        return a.dist < b.dist
-                    end)
-                    for i = 1, math.min(State.ResourceTargets, #targets) do
-                        pcall(function()
-                            Packets.SwingTool.send(targets[i].eid)
-                        end)
-                    end
-                end
+                local targets = getResourceSwingTargets(root.Position, State.ResourceRange)
+                swingOnTargets(targets, State.ResourceTargets)
             end
             task.wait(State.ResourceCooldown)
         end
     end
 end
-
 local function setupCharacter(char)
     healHumanoid = char:WaitForChild("Humanoid")
     cachedFruit = nil
 end
-
 if LocalPlayer.Character then
     setupCharacter(LocalPlayer.Character)
 end
 LocalPlayer.CharacterAdded:Connect(setupCharacter)
-
 task.spawn(function()
     while task.wait() do
         if State.AutoHealOn and healHumanoid and healHumanoid.Health > 0 then
@@ -479,7 +632,6 @@ task.spawn(function()
         end
     end
 end)
-
 local function autofarmLoop()
     while State.AutofarmOn do
         local root = getRoot()
@@ -510,20 +662,20 @@ local function autofarmLoop()
         task.wait(0.6)
     end
 end
-
 local function autoCollectLoop()
     while State.AutoCollectOn do
         local root = getRoot()
         if root then
             local itemFolder = workspace:FindFirstChild("Items")
             if itemFolder then
-                for _, item in ipairs(itemFolder:GetChildren()) do
-                    if item:IsA("BasePart") or item:IsA("MeshPart") then
-                        local entityID = item:GetAttribute("EntityID")
-                        if entityID and (item.Position - root.Position).Magnitude < 30 then
-                            pcall(function()
-                                Packets.Pickup.send(entityID)
-                            end)
+                for _, drop in ipairs(itemFolder:GetChildren()) do
+                    if shouldPickupItem(drop.Name) then
+                        local part = getEntityPart(drop)
+                        if part then
+                            local dist = (part.Position - root.Position).Magnitude
+                            if dist <= State.PickupRange and getEntityID(drop) then
+                                pickupDrop(drop)
+                            end
                         end
                     end
                 end
@@ -532,14 +684,12 @@ local function autoCollectLoop()
         task.wait(0.4)
     end
 end
-
 local RAY_DIST = 20
 local PROBE_ANGLE = 45
 local STEP_HEIGHT = 3.5
 local PROBE_COUNT = 7
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
-
 local function buildExclude()
     local list = {}
     for _, p in ipairs(Players:GetPlayers()) do
@@ -549,7 +699,6 @@ local function buildExclude()
     end
     return list
 end
-
 local function probeRay(origin, dir)
     rayParams.FilterDescendantsInstances = buildExclude()
     local result = workspace:Raycast(origin, dir * RAY_DIST, rayParams)
@@ -558,7 +707,6 @@ local function probeRay(origin, dir)
     end
     return RAY_DIST, nil, origin + dir * RAY_DIST
 end
-
 local function rotateY(vec, deg)
     local r = math.rad(deg)
     return Vector3.new(
@@ -567,12 +715,10 @@ local function rotateY(vec, deg)
         -vec.X * math.sin(r) + vec.Z * math.cos(r)
     )
 end
-
 local function flatDir(from, to)
     local d = Vector3.new(to.X - from.X, 0, to.Z - from.Z)
     return d.Magnitude > 0.01 and d.Unit or Vector3.new(0, 0, 1)
 end
-
 local function steer(rootPos, targetPos)
     local toTarget = flatDir(rootPos, targetPos)
     local origin = rootPos + Vector3.new(0, 1, 0)
@@ -609,7 +755,6 @@ local function steer(rootPos, targetPos)
     end
     return -toTarget, false, true
 end
-
 local function raycastPathfindLoop()
     while State.PathOn do
         local target = State.PathTarget and Players:FindFirstChild(State.PathTarget)
@@ -644,7 +789,6 @@ local function raycastPathfindLoop()
         h:MoveTo(r.Position)
     end
 end
-
 function clearESP(p)
     local h = State.ESPCache[p.Name]
     if h and h.Parent then
@@ -652,7 +796,6 @@ function clearESP(p)
     end
     State.ESPCache[p.Name] = nil
 end
-
 function clearAllESP()
     for _, h in pairs(State.ESPCache) do
         if h and h.Parent then
@@ -661,7 +804,6 @@ function clearAllESP()
     end
     State.ESPCache = {}
 end
-
 local function addESP(p)
     if p == LocalPlayer or not p.Character then
         return
@@ -680,7 +822,6 @@ local function addESP(p)
     h.Parent = p.Character
     State.ESPCache[p.Name] = h
 end
-
 function clearMobESP()
     for model, h in pairs(State.MobESPCache) do
         if h and h.Parent then
@@ -690,7 +831,6 @@ function clearMobESP()
     end
     State.MobESPCache = {}
 end
-
 local function espLoop()
     while State.ESPOn do
         for _, p in ipairs(Players:GetPlayers()) do
@@ -711,7 +851,6 @@ local function espLoop()
     end
     clearAllESP()
 end
-
 local function mobEspLoop()
     while State.MobESPOn do
         for _, obj in ipairs(workspace:GetDescendants()) do
@@ -741,7 +880,6 @@ local function mobEspLoop()
     end
     clearMobESP()
 end
-
 local function addNameTag(p)
     if p == LocalPlayer then
         return
@@ -800,7 +938,6 @@ local function addNameTag(p)
         hum:GetPropertyChangedSignal("Health"):Connect(upd)
     end
 end
-
 function clearAllTags()
     for _, p in ipairs(Players:GetPlayers()) do
         if p.Character then
@@ -814,7 +951,6 @@ function clearAllTags()
         end
     end
 end
-
 local function nameTagLoop()
     while State.TagsOn do
         for _, p in ipairs(Players:GetPlayers()) do
@@ -826,7 +962,6 @@ local function nameTagLoop()
     end
     clearAllTags()
 end
-
 function resetChams()
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
@@ -838,7 +973,6 @@ function resetChams()
         end
     end
 end
-
 local function chamsLoop()
     while State.ChamsOn do
         for _, p in ipairs(Players:GetPlayers()) do
@@ -854,9 +988,7 @@ local function chamsLoop()
     end
     resetChams()
 end
-
 Players.PlayerRemoving:Connect(clearESP)
-
 local function shutdownAll()
     State.AutoHealOn = false
     State.AutofarmOn = false
@@ -875,7 +1007,6 @@ local function shutdownAll()
     clearAllTags()
     resetChams()
 end
-
 local function toggleAutofarm(on)
     State.AutofarmOn = on
     setUiToggle("Autofarm", on)
@@ -884,14 +1015,12 @@ local function toggleAutofarm(on)
     end
     notify("Autofarm [" .. keyName(Keybinds.Autofarm) .. "]", on and "Started!" or "Stopped.")
 end
-
 local function toggleAutoHeal(on)
     State.AutoHealOn = on
     cachedFruit = nil
     setUiToggle("AutoHeal", on)
     notify("Auto Heal [" .. keyName(Keybinds.AutoHeal) .. "]", on and "Active!" or "Stopped.")
 end
-
 local function togglePathfind(on)
     if on and not State.PathTarget then
         notify("Pathfinding", "Select a target first!")
@@ -906,7 +1035,6 @@ local function togglePathfind(on)
         notify("Pathfinding", "Stopped.")
     end
 end
-
 local function toggleAutoPinch(on)
     if on and not State.PinchTarget then
         notify("Auto Pinch", "Select a target first!")
@@ -921,7 +1049,6 @@ local function toggleAutoPinch(on)
         notify("Auto Pinch", "Stopped.")
     end
 end
-
 local function toggleKillAura(on)
     State.KillAuraOn = on
     setUiToggle("KillAura", on)
@@ -930,7 +1057,6 @@ local function toggleKillAura(on)
     end
     notify("Kill Aura [" .. keyName(Keybinds.KillAura) .. "]", on and "Active!" or "Stopped.")
 end
-
 local Window = WindUI:CreateWindow({
     Title = "Cherry Blossom Hub",
     Folder = "BlossomUI",
@@ -949,9 +1075,7 @@ local Window = WindUI:CreateWindow({
         BackgroundColor = Blossom.Pink,
     },
 })
-
 task.defer(bindHubGui)
-
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then
         return
@@ -976,14 +1100,12 @@ UserInputService.InputBegan:Connect(function(input, gp)
         toggleKillAura(not State.KillAuraOn)
     end
 end)
-
 local S_Main = Window:Section({ Title = "Main" })
 local S_Farm = Window:Section({ Title = "Farming" })
 local S_Combat = Window:Section({ Title = "Combat" })
 local S_Move = Window:Section({ Title = "Movement" })
 local S_Vis = Window:Section({ Title = "Visuals" })
 local S_Set = Window:Section({ Title = "Settings" })
-
 local function getPlayerList()
     local t = {}
     for _, p in ipairs(Players:GetPlayers()) do
@@ -993,7 +1115,6 @@ local function getPlayerList()
     end
     return t
 end
-
 local HomeTab = S_Main:Tab({ Title = "Home", Icon = "home", IconColor = Blossom.Pink })
 HomeTab:Paragraph({
     Title = "Cherry Blossom Hub",
@@ -1011,28 +1132,16 @@ HomeTab:Button({
         notify("Cherry Blossom Hub", "Ready!", 4)
     end,
 })
-
 local FarmTab = S_Farm:Tab({ Title = "Autofarm", Icon = "leaf", IconColor = Blossom.Green })
 FarmTab:Paragraph({
     Title = "Autofarm Info",
-    Desc = "Scans game folders first, then full map within 150 studs.\nAuto Collect uses Packets.Pickup.",
+    Desc = "Scans game folders first, then full map within 150 studs.",
 })
 UiToggles.Autofarm = FarmTab:Toggle({
     Title = "Enable Autofarm",
     Value = false,
     Callback = function(v)
         toggleAutofarm(v)
-    end,
-})
-UiToggles.AutoCollect = FarmTab:Toggle({
-    Title = "Auto Collect Drops",
-    Value = false,
-    Callback = function(v)
-        State.AutoCollectOn = v
-        if v then
-            startLoop("AutoCollect", autoCollectLoop)
-        end
-        notify("Auto Collect", v and "On!" or "Off.")
     end,
 })
 FarmTab:Button({
@@ -1055,11 +1164,10 @@ FarmTab:Button({
         end
     end,
 })
-
 local ResTab = S_Farm:Tab({ Title = "Resource Aura", Icon = "pickaxe", IconColor = Blossom.Yellow })
 ResTab:Paragraph({
     Title = "Resource Aura Info",
-    Desc = "Swings at nearby resources using SwingTool packets.\nPauses while equipping tools so god/normal tools still work.",
+    Desc = "Same SwingTool hit as Kill Aura, aimed at resources (EntityID).\nEquip a tool first. Pauses while swapping tools.",
 })
 ResTab:Toggle({
     Title = "Require Equipped Tool",
@@ -1112,7 +1220,112 @@ ResTab:Slider({
         State.ResourceTargets = v
     end,
 })
-
+local PickupTab = S_Farm:Tab({ Title = "Auto Pickup", Icon = "package", IconColor = Blossom.Blue })
+local pickupListValues = mergePickupNamesFromGame()
+local lastPickupPick = pickupListValues[1] or "Log"
+local PickupStatus = PickupTab:Paragraph({
+    Title = "Selected Items",
+    Desc = getPickupListText(),
+})
+PickupTab:Paragraph({
+    Title = "Auto Pickup Info",
+    Desc = "Add item names from the list below. Only those drops get picked up.\nUse Refresh to pull names from workspace.Items in-game.",
+})
+PickupTab:Toggle({
+    Title = "Only Pick Selected Items",
+    Value = true,
+    Callback = function(v)
+        State.PickupFilterOn = v
+        updatePickupStatus(PickupStatus)
+        notify("Auto Pickup", v and "Whitelist on." or "Picking up everything.")
+    end,
+})
+PickupTab:Toggle({
+    Title = "Pickup All Items (ignore list)",
+    Value = false,
+    Callback = function(v)
+        State.PickupWhitelistAll = v
+        updatePickupStatus(PickupStatus)
+        notify("Auto Pickup", v and "All items enabled." or "Using your list.")
+    end,
+})
+local PickupDrop = PickupTab:Dropdown({
+    Title = "Add Item To Pickup List",
+    Values = pickupListValues,
+    Value = 1,
+    Callback = function(v)
+        lastPickupPick = v
+        State.PickupWhitelist[v] = true
+        updatePickupStatus(PickupStatus)
+        notify("Auto Pickup", "Added: " .. v)
+    end,
+})
+PickupTab:Button({
+    Title = "Remove Selected Item",
+    Icon = "minus",
+    Justify = "Center",
+    Callback = function()
+        local name = lastPickupPick
+        if name and State.PickupWhitelist[name] then
+            State.PickupWhitelist[name] = nil
+            updatePickupStatus(PickupStatus)
+            notify("Auto Pickup", "Removed: " .. name)
+        else
+            notify("Auto Pickup", "Item not in your list.")
+        end
+    end,
+})
+PickupTab:Button({
+    Title = "Clear Pickup List",
+    Icon = "trash",
+    Color = Blossom.Red,
+    Justify = "Center",
+    Callback = function()
+        State.PickupWhitelist = {}
+        updatePickupStatus(PickupStatus)
+        notify("Auto Pickup", "List cleared.")
+    end,
+})
+PickupTab:Button({
+    Title = "Refresh Item Names (in-game)",
+    Icon = "refresh-cw",
+    Justify = "Center",
+    Callback = function()
+        pickupListValues = mergePickupNamesFromGame()
+        PickupDrop:Refresh(pickupListValues)
+        notify("Auto Pickup", "Refreshed " .. #pickupListValues .. " item names.")
+    end,
+})
+PickupTab:Slider({
+    Title = "Pickup Range (studs)",
+    Step = 1,
+    Value = { Min = 5, Max = 80, Default = 40 },
+    Callback = function(v)
+        State.PickupRange = v
+    end,
+})
+UiToggles.AutoCollect = PickupTab:Toggle({
+    Title = "Enable Auto Pickup",
+    Value = false,
+    Callback = function(v)
+        State.AutoCollectOn = v
+        if v then
+            if State.PickupFilterOn and not State.PickupWhitelistAll then
+                local count = 0
+                for _ in pairs(State.PickupWhitelist) do
+                    count = count + 1
+                end
+                if count == 0 then
+                    State.AutoCollectOn = false
+                    notify("Auto Pickup", "Add items to your list first!")
+                    return
+                end
+            end
+            startLoop("AutoCollect", autoCollectLoop)
+        end
+        notify("Auto Pickup", v and "On!" or "Off.")
+    end,
+})
 local HealTab = S_Combat:Tab({ Title = "Auto Heal", Icon = "heart", IconColor = Blossom.Red })
 HealTab:Paragraph({
     Title = "Auto Heal Info",
@@ -1191,11 +1404,10 @@ HealTab:Button({
         end
     end,
 })
-
 local KATab = S_Combat:Tab({ Title = "Kill Aura", Icon = "sword", IconColor = Blossom.Red })
 KATab:Paragraph({
     Title = "Kill Aura Info",
-    Desc = "Hits nearby players using SwingTool.send with their EntityID.\nDefault hotkey: F5",
+    Desc = "SwingTool hit (no animation) on nearby player EntityIDs.\nDefault hotkey: F5",
 })
 UiToggles.KillAura = KATab:Toggle({
     Title = "Enable Kill Aura",
@@ -1228,7 +1440,6 @@ KATab:Slider({
         State.KillAuraTargets = v
     end,
 })
-
 local PinchTab = S_Combat:Tab({ Title = "Auto Pinch", Icon = "zap", IconColor = Blossom.Purple })
 PinchTab:Paragraph({
     Title = "Auto Pinch Info",
@@ -1275,7 +1486,6 @@ UiToggles.AutoPinch = PinchTab:Toggle({
         toggleAutoPinch(v)
     end,
 })
-
 local PathTab = S_Move:Tab({ Title = "Pathfinding", Icon = "navigation", IconColor = Blossom.Blue })
 PathTab:Paragraph({
     Title = "Raycast Pathfinding",
@@ -1342,7 +1552,6 @@ PathTab:Button({
         end
     end,
 })
-
 local SpeedTab = S_Move:Tab({ Title = "Speed", Icon = "wind", IconColor = Blossom.Yellow })
 SpeedTab:Slider({
     Title = "Walk Speed",
@@ -1433,7 +1642,6 @@ SpeedTab:Button({
         notify("Speed", "All reset.")
     end,
 })
-
 local EspTab = S_Vis:Tab({ Title = "ESP", Icon = "eye", IconColor = Blossom.Pink })
 EspTab:Paragraph({
     Title = "ESP Info",
@@ -1537,7 +1745,6 @@ EspTab:Button({
         notify("Visuals", "All cleared.")
     end,
 })
-
 local SetTab = S_Set:Tab({ Title = "Settings", Icon = "settings", IconColor = Blossom.Soft })
 SetTab:Paragraph({
     Title = "Keybinds",
@@ -1637,5 +1844,4 @@ SetTab:Button({
         Window:Destroy()
     end,
 })
-
 print("[Cherry Blossom Hub] Loaded.")
