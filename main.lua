@@ -1,6 +1,5 @@
--- ============================================================
--- 🌸 Cherry Blossom Hub | Booga Booga Reborn
--- ============================================================
+-- Cherry Blossom Hub | Booga Booga Reborn
+---
 
 local WindUI = loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"
@@ -37,16 +36,16 @@ local WALL_LIST = {
     "Emerald Wall","Carrot Crystal Wall",
 }
 
--- ============================================================
+---
 -- KEYBINDS
--- ============================================================
+---
 local Keybinds = {
-    ToggleUI   = Enum.KeyCode.RightShift,
-    Autofarm   = Enum.KeyCode.F1,
-    AutoHeal   = Enum.KeyCode.F2,
-    Pathfind   = Enum.KeyCode.F3,
-    AutoPinch  = Enum.KeyCode.F4,
-    KillAura   = Enum.KeyCode.F5,
+    ToggleUI  = Enum.KeyCode.RightShift,
+    Autofarm  = Enum.KeyCode.F1,
+    AutoHeal  = Enum.KeyCode.F2,
+    Pathfind  = Enum.KeyCode.F3,
+    AutoPinch = Enum.KeyCode.F4,
+    KillAura  = Enum.KeyCode.F5,
 }
 local function keyName(kc) return kc and kc.Name or "None" end
 local function toKeyCode(str)
@@ -54,56 +53,47 @@ local function toKeyCode(str)
     return (s and kc) or nil
 end
 
--- ============================================================
+---
 -- STATE
--- ============================================================
+---
 local State = {
-    -- Auto Heal
-    AutoHealOn    = false,
-    HealPercent   = 99,
-    CpsSpeed      = 500,
-    SelectedFruit = "Bloodfruit",
-    -- Autofarm
-    AutofarmOn    = false,
-    AutoCollectOn = false,
-    -- Pathfinding
-    PathOn        = false,
-    PathTarget    = nil,
-    PathInterval  = 0.3,
-    PathStopDist  = 4,
-    -- Speed
-    SpeedLock     = false,
-    Speed         = 16,
-    Jump          = 50,
-    -- ESP
-    ESPOn         = false,
-    MobESPOn      = false,
-    TagsOn        = false,
-    ChamsOn       = false,
-    ESPFill       = Color3.fromRGB(255, 150, 170),
-    ESPOutline    = Color3.fromRGB(255, 255, 255),
-    ESPCache      = {},
-    -- Auto Pinch
-    AutoPinchOn   = false,
-    PinchTarget   = nil,
-    PinchWall     = "Wood Wall",
-    PinchGap      = 2.5,
-    PinchInterval = 0.3,
-    -- Kill Aura
-    KillAuraOn    = false,
-    KillAuraRange = 15,
+    AutoHealOn       = false,
+    HealPercent      = 99,
+    CpsSpeed         = 500,
+    SelectedFruit    = "Bloodfruit",
+    AutofarmOn       = false,
+    AutoCollectOn    = false,
+    PathOn           = false,
+    PathTarget       = nil,
+    PathInterval     = 0.3,
+    PathStopDist     = 4,
+    SpeedLock        = false,
+    Speed            = 16,
+    Jump             = 50,
+    ESPOn            = false,
+    MobESPOn         = false,
+    TagsOn           = false,
+    ChamsOn          = false,
+    ESPFill          = Color3.fromRGB(255, 150, 170),
+    ESPOutline       = Color3.fromRGB(255, 255, 255),
+    ESPCache         = {},
+    AutoPinchOn      = false,
+    PinchTarget      = nil,
+    PinchWall        = "Wood Wall",
+    PinchInterval    = 0.5,
+    KillAuraOn       = false,
+    KillAuraRange    = 15,
     KillAuraCooldown = 0.1,
-    KillAuraTargets = 1,
-    -- Resource Aura
-    ResourceAuraOn = false,
-    ResourceRange  = 20,
+    KillAuraTargets  = 1,
+    ResourceAuraOn   = false,
+    ResourceRange    = 20,
     ResourceCooldown = 0.1,
-    ResourceTargets = 5,
+    ResourceTargets  = 5,
 }
 
--- ============================================================
+---
 -- HELPERS
--- ============================================================
+---
 local function getChar()  return LocalPlayer.Character end
 local function getHum()   local c = getChar() return c and c:FindFirstChildOfClass("Humanoid") end
 local function getRoot()  local c = getChar() return c and c:FindFirstChild("HumanoidRootPart") end
@@ -122,34 +112,9 @@ LocalPlayer.CharacterAdded:Connect(function()
     if State.SpeedLock then applySpeed() end
 end)
 
--- ============================================================
--- BYTENET SWING ENCODE (from Herkle Hub)
--- Used for Kill Aura and Resource Aura
--- ============================================================
-local function decode(str)
-    local b1, b2, b3 = string.byte(str, -4, -2)
-    return b1 + b2 * 256 + b3 * 65536
-end
-
-local function swingencode(ids)
-    if typeof(ids) ~= "table" then ids = {ids} end
-    local count = #ids
-    local out = {string.char(0x00, 0x11, count, 0x00)}
-    for i = 1, count do
-        local num = ids[i]
-        out[#out+1] = string.char(num%256, math.floor(num/256)%256, math.floor(num/65536)%256, 0x00)
-    end
-    return table.concat(out)
-end
-
-local function runSwing(ids)
-    local packet = swingencode(ids)
-    ReplicatedStorage:WaitForChild("ByteNetReliable"):FireServer(buffer.fromstring(packet))
-end
-
--- ============================================================
+---
 -- UI TOGGLE
--- ============================================================
+---
 local UIEnabled = true
 local HubGui    = nil
 
@@ -175,138 +140,142 @@ local function toggleUI()
     end
 end
 
--- ============================================================
--- KILL AURA CORE
--- ============================================================
-task.spawn(function()
-    while true do
-        if not State.KillAuraOn then task.wait(0.1) continue end
-        local root = getRoot()
-        if root then
-            local targets = {}
-            for _, player in pairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer then
-                    local pFolder = workspace.Players:FindFirstChild(player.Name)
-                    if pFolder then
-                        local rootPart = pFolder:FindFirstChild("HumanoidRootPart")
-                        local entityID = pFolder:GetAttribute("EntityID")
-                        if rootPart and entityID then
-                            local dist = (rootPart.Position - root.Position).Magnitude
-                            if dist <= State.KillAuraRange then
-                                table.insert(targets, { eid = entityID, dist = dist })
-                            end
-                        end
-                    end
-                end
-            end
-            if #targets > 0 then
-                table.sort(targets, function(a, b) return a.dist < b.dist end)
-                local selected = {}
-                for i = 1, math.min(State.KillAuraTargets, #targets) do
-                    table.insert(selected, targets[i].eid)
-                end
-                pcall(function() runSwing(selected) end)
-            end
-        end
-        task.wait(State.KillAuraCooldown)
-    end
-end)
+---
+-- AUTO PINCH CORE
+-- Uses target player's HumanoidRootPart position
+-- Raycasts down from both sides and places walls there
+-- Exact same logic as working pinch code but targets others
+---
+local pinchParams = RaycastParams.new()
+pinchParams.FilterType = Enum.RaycastFilterType.Blacklist
 
--- ============================================================
--- RESOURCE AURA CORE
--- ============================================================
-task.spawn(function()
-    while true do
-        if not State.ResourceAuraOn then task.wait(0.1) continue end
-        local root = getRoot()
-        if root then
-            local targets = {}
-            -- Check workspace.Resources
-            local resourceFolder = workspace:FindFirstChild("Resources")
-            if resourceFolder then
-                for _, res in pairs(resourceFolder:GetChildren()) do
-                    if res:IsA("Model") and res:GetAttribute("EntityID") then
-                        local eid = res:GetAttribute("EntityID")
-                        local ppart = res.PrimaryPart or res:FindFirstChildWhichIsA("BasePart")
-                        if ppart then
-                            local dist = (ppart.Position - root.Position).Magnitude
-                            if dist <= State.ResourceRange then
-                                table.insert(targets, { eid = eid, dist = dist })
-                            end
-                        end
-                    end
-                end
-            end
-            -- Also check for Gold Nodes
-            for _, r in pairs(workspace:GetChildren()) do
-                if r:IsA("Model") and r.Name == "Gold Node" and r:GetAttribute("EntityID") then
-                    local ppart = r.PrimaryPart or r:FindFirstChildWhichIsA("BasePart")
-                    if ppart then
-                        local dist = (ppart.Position - root.Position).Magnitude
-                        if dist <= State.ResourceRange then
-                            table.insert(targets, { eid = r:GetAttribute("EntityID"), dist = dist })
-                        end
-                    end
-                end
-            end
-            if #targets > 0 then
-                table.sort(targets, function(a, b) return a.dist < b.dist end)
-                local selected = {}
-                for i = 1, math.min(State.ResourceTargets, #targets) do
-                    table.insert(selected, targets[i].eid)
-                end
-                pcall(function() runSwing(selected) end)
-            end
-        end
-        task.wait(State.ResourceCooldown)
+local function doPinch(targetHRP, wallName)
+    -- Exclude all player characters from raycast
+    local chars = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p.Character then table.insert(chars, p.Character) end
     end
-end)
+    pinchParams.FilterDescendantsInstances = chars
 
--- ============================================================
--- AUTO PINCH CORE — correct PlaceStructure format
--- ============================================================
+    for _, v in pairs({2, -2}) do
+        -- Offset left and right of target
+        local pos = targetHRP.Position + (targetHRP.CFrame.RightVector * v)
+
+        local ray = workspace:Raycast(
+            pos + Vector3.new(0, 8, 0),
+            Vector3.new(0, -25, 0),
+            pinchParams
+        )
+
+        if ray then
+            pcall(function()
+                Packets.PlaceStructure.send({
+                    buildingName = wallName,
+                    cframe       = CFrame.new(ray.Position),
+                })
+            end)
+        end
+
+        task.wait(0.1)
+    end
+end
+
 local function autoPinchLoop()
     while State.AutoPinchOn do
         local target = State.PinchTarget and Players:FindFirstChild(State.PinchTarget)
         if target and target.Character then
-            local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
-            if targetRoot then
-                local pos    = targetRoot.Position
-                local look   = targetRoot.CFrame.LookVector
-                local frontPos = pos + look * State.PinchGap
-                local backPos  = pos - look * State.PinchGap
-                local yAngle   = math.deg(math.atan2(look.X, look.Z))
-
-                task.spawn(function()
-                    pcall(function()
-                        Packets.PlaceStructure.send({
-                            buildingName = State.PinchWall,
-                            yrot         = yAngle,
-                            vec          = frontPos,
-                            isMobile     = false,
-                        })
-                    end)
-                end)
-                task.wait(0.05)
-                task.spawn(function()
-                    pcall(function()
-                        Packets.PlaceStructure.send({
-                            buildingName = State.PinchWall,
-                            yrot         = yAngle,
-                            vec          = backPos,
-                            isMobile     = false,
-                        })
-                    end)
-                end)
+            local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
+            if targetHRP then
+                doPinch(targetHRP, State.PinchWall)
             end
         end
         task.wait(State.PinchInterval)
     end
 end
 
--- ============================================================
+---
+-- KILL AURA CORE
+-- SwingTool.send hits players by EntityID without animation
+-- EntityID is stored as an attribute on the player folder in workspace.Players
+---
+local function killAuraLoop()
+    while State.KillAuraOn do
+        local root = getRoot()
+        if root then
+            local targets = {}
+            -- Players are stored in workspace.Players folder
+            local workspacePlayers = workspace:FindFirstChild("Players")
+            if workspacePlayers then
+                for _, player in pairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer then
+                        local pFolder = workspacePlayers:FindFirstChild(player.Name)
+                        if pFolder then
+                            local rootPart = pFolder:FindFirstChild("HumanoidRootPart")
+                            local entityID = pFolder:GetAttribute("EntityID")
+                            if rootPart and entityID then
+                                local dist = (rootPart.Position - root.Position).Magnitude
+                                if dist <= State.KillAuraRange then
+                                    table.insert(targets, { eid = entityID, dist = dist })
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            if #targets > 0 then
+                table.sort(targets, function(a, b) return a.dist < b.dist end)
+                -- Send swing to each target up to max targets
+                for i = 1, math.min(State.KillAuraTargets, #targets) do
+                    pcall(function()
+                        Packets.SwingTool.send(targets[i].eid)
+                    end)
+                end
+            end
+        end
+        task.wait(State.KillAuraCooldown)
+    end
+end
+
+---
+-- RESOURCE AURA CORE
+-- Swings at resources using EntityID
+---
+local function resourceAuraLoop()
+    while State.ResourceAuraOn do
+        local root = getRoot()
+        if root then
+            local targets = {}
+            local resourceFolder = workspace:FindFirstChild("Resources")
+            if resourceFolder then
+                for _, res in pairs(resourceFolder:GetChildren()) do
+                    if res:IsA("Model") and res:GetAttribute("EntityID") then
+                        local ppart = res.PrimaryPart or res:FindFirstChildWhichIsA("BasePart")
+                        if ppart then
+                            local dist = (ppart.Position - root.Position).Magnitude
+                            if dist <= State.ResourceRange then
+                                table.insert(targets, { eid = res:GetAttribute("EntityID"), dist = dist })
+                            end
+                        end
+                    end
+                end
+            end
+            if #targets > 0 then
+                table.sort(targets, function(a, b) return a.dist < b.dist end)
+                for i = 1, math.min(State.ResourceTargets, #targets) do
+                    pcall(function()
+                        Packets.SwingTool.send(targets[i].eid)
+                    end)
+                end
+            end
+        end
+        task.wait(State.ResourceCooldown)
+    end
+end
+
+---
 -- AUTO HEAL CORE
--- ============================================================
+---
 local healHumanoid = nil
 local cachedFruit  = nil
 local lastUseTime  = 0
@@ -347,9 +316,9 @@ task.spawn(function()
     end
 end)
 
---
+---
 -- AUTOFARM CORE
--- 
+---
 local function autofarmLoop()
     while State.AutofarmOn do
         local root = getRoot() local hum = getHum()
@@ -387,7 +356,7 @@ local function autoCollectLoop()
             local itemFolder = workspace:FindFirstChild("Items")
             if itemFolder then
                 for _, item in ipairs(itemFolder:GetChildren()) do
-                    if (item:IsA("BasePart") or item:IsA("MeshPart")) then
+                    if item:IsA("BasePart") or item:IsA("MeshPart") then
                         local entityID = item:GetAttribute("EntityID")
                         if entityID and (item.Position - root.Position).Magnitude < 30 then
                             pcall(function() Packets.Pickup.send(entityID) end)
@@ -400,9 +369,9 @@ local function autoCollectLoop()
     end
 end
 
---
--- RAYCAST PATHFIND or Sum
---
+---
+-- RAYCAST PATHFINDING
+---
 local RAY_DIST=20 local PROBE_ANGLE=45 local STEP_HEIGHT=3.5 local PROBE_COUNT=7
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -471,9 +440,9 @@ local function raycastPathfindLoop()
     if h and r then h:MoveTo(r.Position) end
 end
 
--- ============================================================
+---
 -- ESP
--- ============================================================
+---
 local function addESP(p)
     if p==LocalPlayer or not p.Character then return end
     if State.ESPCache[p.Name] and State.ESPCache[p.Name].Parent then return end
@@ -506,6 +475,7 @@ local function espLoop()
     clearAllESP()
 end
 Players.PlayerRemoving:Connect(clearESP)
+
 local function mobEspLoop()
     while State.MobESPOn do
         for _,obj in ipairs(workspace:GetDescendants()) do
@@ -526,6 +496,7 @@ local function mobEspLoop()
         if obj:IsA("Model") then local h=obj:FindFirstChildOfClass("Highlight") if h then h:Destroy() end end
     end
 end
+
 local function addNameTag(p)
     if p==LocalPlayer then return end
     local char=p.Character if not char then return end
@@ -577,17 +548,17 @@ local function nameTagLoop()
     clearAllTags()
 end
 
--- 
--- WINDOW Ui
--- 
+---
+-- WINDOW
+---
 local Window = WindUI:CreateWindow({
-    Title  = "🌸 Cherry Blossom Hub",
-    Folder = "BlossomUI",
-    Icon   = "sparkles",
+    Title         = "Cherry Blossom Hub",
+    Folder        = "BlossomUI",
+    Icon          = "sparkles",
     NewElements   = true,
     HideSearchBar = false,
     OpenButton = {
-        Title     = "🌸 Open Hub",
+        Title     = "Open Hub",
         Draggable = true,
         Scale     = 0.55,
         Color     = ColorSequence.new(Blossom.Pink, Blossom.Soft, Blossom.Light),
@@ -599,9 +570,9 @@ local Window = WindUI:CreateWindow({
     },
 })
 
--- 
--- KEYBIND Something
--- 
+---
+-- KEYBIND LISTENER
+---
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
     local key = input.KeyCode
@@ -634,13 +605,14 @@ UserInputService.InputBegan:Connect(function(input, gp)
     end
     if key == Keybinds.KillAura then
         State.KillAuraOn = not State.KillAuraOn
+        if State.KillAuraOn then task.spawn(killAuraLoop) end
         notify("Kill Aura ["..keyName(Keybinds.KillAura).."]", State.KillAuraOn and "Active!" or "Stopped.")
     end
 end)
 
--- 
+---
 -- SECTIONS
---
+---
 local S_Main   = Window:Section({ Title = "Main"     })
 local S_Farm   = Window:Section({ Title = "Farming"  })
 local S_Combat = Window:Section({ Title = "Combat"   })
@@ -656,35 +628,46 @@ local function getPlayerList()
     return t
 end
 
--- 
+---
 -- HOME TAB
---
+---
 local HomeTab = S_Main:Tab({ Title = "Home", Icon = "home", IconColor = Blossom.Pink })
 HomeTab:Paragraph({
-    Title = "Welcome to Cherry Blossom Hub",
-    Desc  = "Full featured hub for Booga Booga Reborn.\nHotkeys work even when UI is closed.",
+    Title = "Cherry Blossom Hub",
+    Desc  = "Full featured hub for Booga Booga Reborn.\nAll hotkeys work even when UI is closed.",
 })
 HomeTab:Paragraph({
     Title = "Default Hotkeys",
-    Desc  = "RightShift — Toggle UI\nF1 — Autofarm\nF2 — Auto Heal\nF3 — Pathfinding\nF4 — Auto Pinch\nF5 — Kill Aura",
+    Desc  = "RightShift - Toggle UI\nF1 - Autofarm\nF2 - Auto Heal\nF3 - Pathfinding\nF4 - Auto Pinch\nF5 - Kill Aura\n\nChange all in Settings.",
 })
 HomeTab:Button({
     Title = "Show Notification", Icon = "sparkles", Justify = "Center",
     Callback = function() notify("Cherry Blossom Hub","Ready!",4) end,
 })
 
--- 
+---
 -- AUTOFARM TAB
--- 
+---
 local FarmTab = S_Farm:Tab({ Title = "Autofarm", Icon = "leaf", IconColor = Blossom.Green })
-FarmTab:Paragraph({ Title = "Autofarm Info", Desc = "Fires the nearest ProximityPrompt. Auto Collect uses EntityID pickup from workspace.Items." })
-FarmTab:Toggle({
-    Title = "Enable Autofarm", Value = false,
-    Callback = function(v) State.AutofarmOn=v if v then task.spawn(autofarmLoop) end notify("Autofarm",v and"Started!"or"Stopped.") end,
+FarmTab:Paragraph({
+    Title = "Autofarm Info",
+    Desc  = "Fires nearest ProximityPrompt every 0.6s.\nAuto Collect picks up items via Packets.Pickup.",
 })
 FarmTab:Toggle({
-    Title = "Auto Collect Drops", Desc = "Picks up nearby items using Packets.Pickup.", Value = false,
-    Callback = function(v) State.AutoCollectOn=v if v then task.spawn(autoCollectLoop) end notify("Auto Collect",v and"On!"or"Off.") end,
+    Title = "Enable Autofarm", Value = false,
+    Callback = function(v)
+        State.AutofarmOn = v
+        if v then task.spawn(autofarmLoop) end
+        notify("Autofarm", v and "Started!" or "Stopped.")
+    end,
+})
+FarmTab:Toggle({
+    Title = "Auto Collect Drops", Value = false,
+    Callback = function(v)
+        State.AutoCollectOn = v
+        if v then task.spawn(autoCollectLoop) end
+        notify("Auto Collect", v and "On!" or "Off.")
+    end,
 })
 FarmTab:Button({
     Title = "Manual Farm", Icon = "zap", Justify = "Center",
@@ -707,30 +690,43 @@ FarmTab:Button({
     end,
 })
 
--- Resource Aura
-FarmTab:Paragraph({ Title = "Resource Aura", Desc = "Swings at nearby resources using ByteNet EntityID swing packets." })
-FarmTab:Toggle({
-    Title = "Enable Resource Aura", Value = false,
-    Callback = function(v) State.ResourceAuraOn=v notify("Resource Aura",v and"Active!"or"Stopped.") end,
+---
+-- RESOURCE AURA
+---
+local ResTab = S_Farm:Tab({ Title = "Resource Aura", Icon = "pickaxe", IconColor = Blossom.Yellow })
+ResTab:Paragraph({
+    Title = "Resource Aura Info",
+    Desc  = "Swings at nearby resources using SwingTool EntityID packets.",
 })
-FarmTab:Slider({
-    Title = "Resource Range (studs)", Step = 1, Value = { Min = 1, Max = 50, Default = 20 },
+ResTab:Toggle({
+    Title = "Enable Resource Aura", Value = false,
+    Callback = function(v)
+        State.ResourceAuraOn = v
+        if v then task.spawn(resourceAuraLoop) end
+        notify("Resource Aura", v and "Active!" or "Stopped.")
+    end,
+})
+ResTab:Slider({
+    Title = "Range (studs)", Step = 1, Value = { Min = 1, Max = 50, Default = 20 },
     Callback = function(v) State.ResourceRange = v end,
 })
-FarmTab:Slider({
-    Title = "Swing Cooldown (s)", Step = 0.01, Value = { Min = 0.01, Max = 1, Default = 0.1 },
+ResTab:Slider({
+    Title = "Cooldown (s)", Step = 0.01, Value = { Min = 0.01, Max = 1, Default = 0.1 },
     Callback = function(v) State.ResourceCooldown = v end,
 })
-FarmTab:Slider({
+ResTab:Slider({
     Title = "Max Targets", Step = 1, Value = { Min = 1, Max = 10, Default = 5 },
     Callback = function(v) State.ResourceTargets = v end,
 })
 
--- 
+---
 -- AUTO HEAL TAB
--- 
+---
 local HealTab = S_Combat:Tab({ Title = "Auto Heal", Icon = "heart", IconColor = Blossom.Red })
-HealTab:Paragraph({ Title = "Auto Heal Info", Desc = "Uses Packets.UseBagItem. Hotkey: F2" })
+HealTab:Paragraph({
+    Title = "Auto Heal Info",
+    Desc  = "Uses Packets.UseBagItem to heal from inventory.\nDefault hotkey: F2",
+})
 HealTab:Dropdown({
     Title = "Heal Fruit", Values = FRUIT_LIST, Value = 1,
     Callback = function(v) State.SelectedFruit=v cachedFruit=nil notify("Auto Heal","Fruit: "..v) end,
@@ -745,33 +741,50 @@ HealTab:Slider({
 })
 HealTab:Toggle({
     Title = "Enable Auto Heal", Value = false,
-    Callback = function(v) State.AutoHealOn=v cachedFruit=nil notify("Auto Heal",v and"Active! Using: "..State.SelectedFruit or"Stopped.") end,
+    Callback = function(v)
+        State.AutoHealOn=v cachedFruit=nil
+        notify("Auto Heal", v and "Active! Using: "..State.SelectedFruit or "Stopped.")
+    end,
 })
-HealTab:Paragraph({ Title = "Fruit Guide", Desc = "Bloodfruit — 4 HP (best PvP)\nFruitcake — 4 HP + 35 food\nCooked Meat — 1 HP + 35 food\nBerry — 1.5 HP" })
+HealTab:Paragraph({
+    Title = "Fruit Guide",
+    Desc  = "Bloodfruit - 4 HP (best PvP)\nFruitcake - 4 HP + 35 food\nCooked Meat - 1 HP + 35 food\nBerry - 1.5 HP",
+})
 HealTab:Button({
     Title = "Heal Now", Icon = "heart", Justify = "Center", Color = Blossom.Red,
     Callback = function()
         if not healHumanoid then return end
         local mainGui = LocalPlayer.PlayerGui:FindFirstChild("MainGui") if not mainGui then return end
-        local inventory = mainGui:FindFirstChild("RightPanel") and mainGui.RightPanel:FindFirstChild("Inventory") and mainGui.RightPanel.Inventory:FindFirstChild("List")
+        local inventory = mainGui:FindFirstChild("RightPanel")
+            and mainGui.RightPanel:FindFirstChild("Inventory")
+            and mainGui.RightPanel.Inventory:FindFirstChild("List")
         if not inventory then return end
         local found = nil
         for _, item in ipairs(inventory:GetChildren()) do
             if item:IsA("ImageLabel") and item.Name == State.SelectedFruit then found=item break end
         end
-        if found then pcall(function() Packets.UseBagItem.send(found.LayoutOrder) end) notify("Heal","Used: "..State.SelectedFruit)
+        if found then
+            pcall(function() Packets.UseBagItem.send(found.LayoutOrder) end)
+            notify("Heal","Used: "..State.SelectedFruit)
         else notify("Heal",State.SelectedFruit.." not in inventory!") end
     end,
 })
 
---
+---
 -- KILL AURA TAB
--- 
+---
 local KATab = S_Combat:Tab({ Title = "Kill Aura", Icon = "sword", IconColor = Blossom.Red })
-KATab:Paragraph({ Title = "Kill Aura Info", Desc = "Swings at nearby players using ByteNet EntityID swing packets.\nDefault hotkey: F5" })
+KATab:Paragraph({
+    Title = "Kill Aura Info",
+    Desc  = "Hits nearby players using SwingTool.send with their EntityID.\nNo animation - direct damage packet.\nDefault hotkey: F5",
+})
 KATab:Toggle({
     Title = "Enable Kill Aura", Value = false,
-    Callback = function(v) State.KillAuraOn=v notify("Kill Aura",v and"Active!"or"Stopped.") end,
+    Callback = function(v)
+        State.KillAuraOn = v
+        if v then task.spawn(killAuraLoop) end
+        notify("Kill Aura", v and "Active!" or "Stopped.")
+    end,
 })
 KATab:Slider({
     Title = "Range (studs)", Step = 1, Value = { Min = 1, Max = 30, Default = 15 },
@@ -786,11 +799,14 @@ KATab:Slider({
     Callback = function(v) State.KillAuraTargets = v end,
 })
 
--- \
+---
 -- AUTO PINCH TAB
--- 
+---
 local PinchTab = S_Combat:Tab({ Title = "Auto Pinch", Icon = "zap", IconColor = Blossom.Purple })
-PinchTab:Paragraph({ Title = "Auto Pinch Info", Desc = "Places two walls trapping the target using correct PlaceStructure packet format.\nHotkey: F4" })
+PinchTab:Paragraph({
+    Title = "Auto Pinch Info",
+    Desc  = "Raycasts from left and right of target then places walls at ground level.\nDefault hotkey: F4",
+})
 local PinchDrop = PinchTab:Dropdown({
     Title = "Target Player", Values = getPlayerList(), AllowNone = true,
     Callback = function(v) State.PinchTarget = v end,
@@ -804,11 +820,7 @@ PinchTab:Dropdown({
     Callback = function(v) State.PinchWall=v notify("Auto Pinch","Wall: "..v) end,
 })
 PinchTab:Slider({
-    Title = "Wall Gap (studs)", Step = 0.5, Value = { Min = 1, Max = 6, Default = 2.5 },
-    Callback = function(v) State.PinchGap = v end,
-})
-PinchTab:Slider({
-    Title = "Re-place Interval (s)", Step = 0.1, Value = { Min = 0.1, Max = 2, Default = 0.3 },
+    Title = "Re-place Interval (s)", Step = 0.1, Value = { Min = 0.1, Max = 2, Default = 0.5 },
     Callback = function(v) State.PinchInterval = v end,
 })
 PinchTab:Toggle({
@@ -823,11 +835,14 @@ PinchTab:Toggle({
     end,
 })
 
--- 
+---
 -- PATHFINDING TAB
--- 
+---
 local PathTab = S_Move:Tab({ Title = "Pathfinding", Icon = "navigation", IconColor = Blossom.Blue })
-PathTab:Paragraph({ Title = "Raycast Pathfinding", Desc = "Steers around obstacles using raycasts. Hotkey: F3" })
+PathTab:Paragraph({
+    Title = "Raycast Pathfinding",
+    Desc  = "Steers around obstacles using raycasts.\nDefault hotkey: F3",
+})
 local PathDrop = PathTab:Dropdown({
     Title = "Target Player", Values = getPlayerList(), AllowNone = true,
     Callback = function(v) State.PathTarget = v end,
@@ -867,9 +882,9 @@ PathTab:Button({
     end,
 })
 
--- 
+---
 -- SPEED TAB
--- 
+---
 local SpeedTab = S_Move:Tab({ Title = "Speed", Icon = "wind", IconColor = Blossom.Yellow })
 SpeedTab:Slider({
     Title = "Walk Speed", Desc = "Default: 16 / Max: 21", Step = 1,
@@ -883,7 +898,7 @@ SpeedTab:Slider({
 })
 SpeedTab:Toggle({
     Title = "Speed Lock", Desc = "Re-applies speed after every respawn.", Value = false,
-    Callback = function(v) State.SpeedLock=v notify("Speed Lock",v and"Active."or"Disabled.") end,
+    Callback = function(v) State.SpeedLock=v notify("Speed Lock", v and "Active." or "Disabled.") end,
 })
 local PG = SpeedTab:Group({})
 PG:Button({ Title="Default", Justify="Center", Icon="",
@@ -899,13 +914,21 @@ SpeedTab:Button({
     Callback=function() State.Speed=16 State.Jump=50 applySpeed() notify("Speed","All reset.") end,
 })
 
---
+---
 -- ESP TAB
--- 
+---
 local EspTab = S_Vis:Tab({ Title = "ESP", Icon = "eye", IconColor = Blossom.Pink })
+EspTab:Paragraph({
+    Title = "ESP Info",
+    Desc  = "Uses Highlight instances parented to player characters.\nNote: Some executors like Delta may block Highlight rendering.",
+})
 EspTab:Toggle({
-    Title = "Player ESP", Desc = "Highlights players through walls.", Value = false,
-    Callback = function(v) State.ESPOn=v if v then task.spawn(espLoop) else clearAllESP() end notify("ESP",v and"On!"or"Off.") end,
+    Title = "Player ESP", Value = false,
+    Callback = function(v)
+        State.ESPOn=v
+        if v then task.spawn(espLoop) else clearAllESP() end
+        notify("ESP", v and "On!" or "Off.")
+    end,
 })
 EspTab:Colorpicker({
     Title = "Fill Color", Default = State.ESPFill,
@@ -917,11 +940,19 @@ EspTab:Colorpicker({
 })
 EspTab:Toggle({
     Title = "Mob ESP", Value = false,
-    Callback = function(v) State.MobESPOn=v if v then task.spawn(mobEspLoop) end notify("Mob ESP",v and"On!"or"Off.") end,
+    Callback = function(v)
+        State.MobESPOn=v
+        if v then task.spawn(mobEspLoop) end
+        notify("Mob ESP", v and "On!" or "Off.")
+    end,
 })
 EspTab:Toggle({
-    Title = "Name Tags", Desc = "Shows name and health bar above players.", Value = false,
-    Callback = function(v) State.TagsOn=v if v then task.spawn(nameTagLoop) else clearAllTags() end notify("Name Tags",v and"On!"or"Off.") end,
+    Title = "Name Tags", Value = false,
+    Callback = function(v)
+        State.TagsOn=v
+        if v then task.spawn(nameTagLoop) else clearAllTags() end
+        notify("Name Tags", v and "On!" or "Off.")
+    end,
 })
 EspTab:Toggle({
     Title = "Chams", Desc = "Makes enemy parts 40% transparent.", Value = false,
@@ -948,7 +979,7 @@ EspTab:Toggle({
                 end
             end
         end)
-        notify("Chams",v and"On!"or"Off.")
+        notify("Chams", v and "On!" or "Off.")
     end,
 })
 EspTab:Button({
@@ -968,11 +999,14 @@ EspTab:Button({
     end,
 })
 
--- 
+---
 -- SETTINGS TAB
--- 
+---
 local SetTab = S_Set:Tab({ Title = "Settings", Icon = "settings", IconColor = Blossom.Soft })
-SetTab:Paragraph({ Title = "Keybinds", Desc = "Click a box then press any key. Works when UI is closed." })
+SetTab:Paragraph({
+    Title = "Keybinds",
+    Desc  = "Click a box then press any key.\nWorks even when UI is closed.",
+})
 SetTab:Keybind({
     Title = "Toggle UI", Desc = "Default: RightShift", Value = "RightShift",
     Callback = function(v) local kc=toKeyCode(v) if kc then Keybinds.ToggleUI=kc notify("Keybind","Toggle UI: "..v) end end,
@@ -999,11 +1033,11 @@ SetTab:Keybind({
 })
 SetTab:Button({
     Title = "Credits", Icon = "heart", Justify = "Center",
-    Callback = function() notify("Credits","Cherry Blossom Hub\nUI: WindUI\nPackets research: Herkle Hub",5) end,
+    Callback = function() notify("Credits","Cherry Blossom Hub\nUI: WindUI by Footagesus\nPinch: Exact raycast format\nKill Aura: SwingTool.send EntityID",5) end,
 })
 SetTab:Button({
     Title = "Close UI", Icon = "x", Color = Blossom.Red, Justify = "Center",
     Callback = function() Window:Destroy() end,
 })
 
-print("[CherryHub] All tabs loaded! Ready.")
+print("Cherry Blossom Hub loaded!")
