@@ -40,6 +40,7 @@ local function randomKey()
     end
     return s
 end
+local Verified = false
 
 local function saveKey(key)
     if writefile then
@@ -50,7 +51,6 @@ local function saveKey(key)
         writefile(KeySystem.FileName, HttpService:JSONEncode(data))
     end
 end
-
 local function loadKey()
     if isfile and isfile(KeySystem.FileName) then
         local success, data = pcall(function()
@@ -73,7 +73,7 @@ end
 
 local function checkKey(inputKey)
     inputKey = cleanKey(inputKey)
-
+end
     if inputKey == "" then
         return false
     end
@@ -88,7 +88,7 @@ local function checkKey(inputKey)
         return false
     end
 
-    for line in response:gmatch("[^\r\n]+") do
+      for line in response:gmatch("[^\r\n]+") do
         local validKey = cleanKey(line)
 
         if validKey ~= "" and inputKey == validKey then
@@ -102,7 +102,9 @@ end
 local SavedKey = loadKey()
 
 if SavedKey and checkKey(SavedKey) then
-    WindUI:Notify({
+    Verified = true
+
+    WindUI:Notify({sS
         Title = "Cherry Blossom",
         Content = "Auto verified saved key",
         Duration = 3
@@ -200,9 +202,9 @@ Tab:Button({
     Tab:Button({
         Title = "Verify Key",
         Callback = function()
-            if checkKey(InputKey) then
-                saveKey(InputKey)
-
+           if checkKey(InputKey) then
+    saveKey(InputKey)
+    Verified = true
                 WindUI:Notify({
                     Title = "Success",
                     Content = "Key verified",
@@ -222,10 +224,10 @@ Tab:Button({
         end
     })
 
-    repeat
-        task.wait()
-    until loadKey()
-end
+ repeat
+      task.wait()
+               until Verified
+end 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService  = game:GetService("UserInputService")
