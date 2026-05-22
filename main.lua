@@ -11,10 +11,12 @@ local KeySystem = {
     FileName = "CherryBlossomKey.json",
     Discord = "https://discord.gg/aaJfDTFu",
     Lootlabs = "https://lootdest.org/s?dFqzcoYK",
-    Linkvertise = "https://link-target.net/5922287/Ua3185mHsUrX",
-                  "https://link-center.net/5922287/AoMhDFSEPbpg",
-                  "https://link-hub.net/5922287/cOxXb3ZcMgJg",
-                  "https://link-center.net/5922287/4TDRS4HEPDHL",
+    KeyLinks = {
+    "https://link-target.net/5922287/Ua3l85mHsUrX",
+    "https://link-center.net/5922287/AoMhDFSEPbgg",
+    "https://link-hub.net/5922287/cOxXb3ZcMgJg",
+    "https://link-center.net/5922287/4TDRS4HEPDHL",
+},
     KeysURL = "https://raw.githubusercontent.com/boogag0dz-glitch/Godz-hub/refs/heads/main/keys.txt",
     ExpireHours = 24
 }
@@ -130,19 +132,37 @@ else
             })
         end
     })
+    
 Tab:Button({
     Title = "Get Key (Linkvertise)",
     Callback = function()
         local links = KeySystem.KeyLinks
+
+        if not links or #links == 0 then
+            WindUI:Notify({
+                Title = "Error",
+                Content = "No key links found",
+                Duration = 3
+            })
+            return
+        end
+
         local randomLink = links[math.random(1, #links)]
 
-        setclipboard(randomLink)
-
-        WindUI:Notify({
-            Title = "Linkvertise",
-            Content = "Random key link copied to clipboard",
-            Duration = 3
-        })
+        if setclipboard then
+            setclipboard(randomLink)
+            WindUI:Notify({
+                Title = "Linkvertise",
+                Content = "Random key link copied",
+                Duration = 3
+            })
+        else
+            WindUI:Notify({
+                Title = "Clipboard Error",
+                Content = "Your executor does not support setclipboard",
+                Duration = 5
+            })
+        end
     end
 })
     Tab:Button({
