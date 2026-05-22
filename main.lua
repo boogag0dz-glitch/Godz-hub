@@ -1,20 +1,25 @@
 -- Cherry Blossom Hub | Booga Booga Reborn
--- Reliability pass: single loops, safe ESP cleanup, Packets wait, scoped scans
+-- v2: single loops, safe ESP, Packets wait, resource aura equip fix, no `continue`
+
 local WindUI = loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"
 ))()
+
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService  = game:GetService("UserInputService")
 local RunService        = game:GetService("RunService")
 local LocalPlayer       = Players.LocalPlayer
+
 local packetsModule = ReplicatedStorage:WaitForChild("Modules", 30)
     and ReplicatedStorage.Modules:WaitForChild("Packets", 30)
 if not packetsModule then
     warn("[Cherry Blossom Hub] Packets module not found.")
     return
 end
+
 local Packets = require(packetsModule)
+
 local Blossom = {
     Pink   = Color3.fromRGB(255, 183, 197),
     Soft   = Color3.fromRGB(247, 198, 208),
@@ -25,22 +30,23 @@ local Blossom = {
     Red    = Color3.fromRGB(252, 165, 165),
     Purple = Color3.fromRGB(196, 181, 253),
 }
+
 local FRUIT_LIST = {
     "Bloodfruit", "Fruitcake", "Cooked Meat", "Cooked Fish",
     "Berry", "Cloudberry", "Frostfruit", "Blossom",
     "Mango", "Watermelon", "Orange", "Lemon",
     "Apple", "Strawberry", "Bluefruit", "Yellowfruit", "Pinefruit",
 }
+
 local WALL_LIST = {
     "Wood Wall", "Iron Wall", "Stone Wall", "Ice Wall",
     "Adurite Wall", "Crystal Wall", "Magnetite Wall",
     "Emerald Wall", "Carrot Crystal Wall",
 }
+
 local SCAN_FOLDERS = { "Resources", "Items", "Plants", "Nodes", "Harvest" }
 local PROMPT_SCAN_RADIUS = 150
----
--- KEYBINDS
----
+
 local Keybinds = {
     ToggleUI  = Enum.KeyCode.RightShift,
     Autofarm  = Enum.KeyCode.F1,
@@ -49,18 +55,18 @@ local Keybinds = {
     AutoPinch = Enum.KeyCode.F4,
     KillAura  = Enum.KeyCode.F5,
 }
+
 local function keyName(kc)
     return kc and kc.Name or "None"
 end
+
 local function toKeyCode(str)
     local ok, kc = pcall(function()
         return Enum.KeyCode[str]
     end)
     return (ok and kc) or nil
 end
----
--- STATE
----
+
 local State = {
     AutoHealOn       = false,
     HealPercent      = 99,
@@ -91,12 +97,14 @@ local State = {
     KillAuraRange    = 15,
     KillAuraCooldown = 0.1,
     KillAuraTargets  = 1,
-    ResourceAuraOn   = false,
-    ResourceRange    = 20,
-    ResourceCooldown = 0.1,
-    ResourceTargets  = 5,
+    ResourceAuraOn       = false,
+    ResourceRange        = 20,
+    ResourceCooldown     = 0.25,
+    ResourceTargets      = 5,
+    ResourceRequireTool  = true,
+    ResourceEquipPause   = 2,
 }
--- One running thread per feature (prevents double loops on re-toggle)
+
 local LoopRunning = {
     Autofarm      = false,
     AutoCollect   = false,
@@ -109,26 +117,76 @@ local LoopRunning = {
     NameTags      = false,
     Chams         = false,
 }
+
 local UiToggles = {}
----
--- HELPERS
----
+
 local function getChar()
     return LocalPlayer.Character
 end
+
 local function getHum()
     local c = getChar()
     return c and c:FindFirstChildOfClass("Humanoid")
 end
+
 local function getRoot()
     local c = getChar()
     return c and c:FindFirstChild("HumanoidRootPart")
 end
+
+local function getEquippedTool()
+    local char = getChar()
+    if not char then
+        return nil
+    end
+    for _, child in ipairs(char:GetChildren()) do
+        if child:IsA("Tool") then
+            return child
+        end
+    end
+    return nil
+end
+
+local resourceAuraPauseUntil = 0
+
+local function pauseResourceAura(seconds)
+    resourceAuraPauseUntil = os.clock() + (seconds or State.ResourceEquipPause)
+end
+
+local function bindToolEquipPause(char)
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+        or LocalPlayer:WaitForChild("Backpack", 5)
+    if not backpack then
+        return
+    end
+
+    local function onEquipActivity()
+        pauseResourceAura(State.ResourceEquipPause)
+    end
+
+    char.ChildAdded:Connect(function(child)
+        if child:IsA("Tool") then
+            onEquipActivity()
+        end
+    end)
+    char.ChildRemoved:Connect(function(child)
+        if child:IsA("Tool") then
+            onEquipActivity()
+        end
+    end)
+    backpack.ChildRemoved:Connect(function(child)
+        if child:IsA("Tool") then
+            pauseResourceAura(State.ResourceEquipPause + 0.5)
+        end
+    end)
+end
+
 local function notify(title, msg, dur)
     pcall(function()
         WindUI:Notify({ Title = title, Content = msg, Duration = dur or 3 })
     end)
 end
+
 local function applySpeed()
     local h = getHum()
     if h then
@@ -136,6 +194,7 @@ local function applySpeed()
         h.JumpPower = State.Jump
     end
 end
+
 local function setUiToggle(key, value)
     local el = UiToggles[key]
     if not el then
@@ -149,6 +208,7 @@ local function setUiToggle(key, value)
         end
     end)
 end
+
 local function startLoop(name, fn)
     if LoopRunning[name] then
         return
@@ -159,9 +219,11 @@ local function startLoop(name, fn)
         LoopRunning[name] = false
     end)
 end
+
 local function findNearestPrompt(root)
     local best, bestDist, bestPrompt = nil, math.huge, nil
     local rootPos = root.Position
+
     local function consider(obj)
         if not obj:IsA("ProximityPrompt") then
             return
@@ -176,6 +238,7 @@ local function findNearestPrompt(root)
             end
         end
     end
+
     for _, folderName in ipairs(SCAN_FOLDERS) do
         local folder = workspace:FindFirstChild(folderName)
         if folder then
@@ -184,47 +247,41 @@ local function findNearestPrompt(root)
             end
         end
     end
+
     if not bestPrompt then
         for _, desc in ipairs(workspace:GetDescendants()) do
             consider(desc)
         end
     end
+
     return best, bestDist, bestPrompt
 end
-local function shutdownAll()
-    State.AutoHealOn = false
-    State.AutofarmOn = false
-    State.AutoCollectOn = false
-    State.PathOn = false
-    State.AutoPinchOn = false
-    State.KillAuraOn = false
-    State.ResourceAuraOn = false
-    State.ESPOn = false
-    State.MobESPOn = false
-    State.TagsOn = false
-    State.ChamsOn = false
-    cachedFruit = nil
-    clearAllESP()
-    clearMobESP()
-    clearAllTags()
-    resetChams()
-end
-LocalPlayer.CharacterAdded:Connect(function()
+
+local healHumanoid = nil
+local cachedFruit = nil
+local lastUseTime = 0
+
+LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(0.5)
+    bindToolEquipPause(char)
     if State.SpeedLock then
         applySpeed()
     end
 end)
----
--- UI TOGGLE
----
+
+if LocalPlayer.Character then
+    bindToolEquipPause(LocalPlayer.Character)
+end
+
 local UIEnabled = true
 local HubGui = nil
+
 local knownGameGuis = {
     MainGui = true, RegionUI = true, SecondaryGui = true, SpawnGui = true,
     Toast = true, TradeUI = true, ClanUI = true, Topbar = true,
     vignette = true, Calendar = true, CrateUI = true, RobloxGui = true,
 }
+
 local function bindHubGui()
     if HubGui and HubGui.Parent then
         return
@@ -236,6 +293,7 @@ local function bindHubGui()
         end
     end
 end
+
 local function toggleUI()
     bindHubGui()
     if HubGui and HubGui.Parent then
@@ -243,11 +301,10 @@ local function toggleUI()
         HubGui.Enabled = UIEnabled
     end
 end
----
--- AUTO PINCH
----
+
 local pinchParams = RaycastParams.new()
 pinchParams.FilterType = Enum.RaycastFilterType.Exclude
+
 local function doPinch(targetHRP, wallName)
     local chars = {}
     for _, p in pairs(Players:GetPlayers()) do
@@ -256,6 +313,7 @@ local function doPinch(targetHRP, wallName)
         end
     end
     pinchParams.FilterDescendantsInstances = chars
+
     for _, v in pairs({ 2, -2 }) do
         local pos = targetHRP.Position + (targetHRP.CFrame.RightVector * v)
         local ray = workspace:Raycast(
@@ -274,6 +332,7 @@ local function doPinch(targetHRP, wallName)
         task.wait(0.1)
     end
 end
+
 local function autoPinchLoop()
     while State.AutoPinchOn do
         local target = State.PinchTarget and Players:FindFirstChild(State.PinchTarget)
@@ -286,9 +345,7 @@ local function autoPinchLoop()
         task.wait(State.PinchInterval)
     end
 end
----
--- KILL AURA
----
+
 local function killAuraLoop()
     while State.KillAuraOn do
         local root = getRoot()
@@ -326,109 +383,104 @@ local function killAuraLoop()
         task.wait(State.KillAuraCooldown)
     end
 end
----
--- RESOURCE AURA
----
+
 local function resourceAuraLoop()
     while State.ResourceAuraOn do
-        local root = getRoot()
-        if root then
-            local targets = {}
-            local resourceFolder = workspace:FindFirstChild("Resources")
-            if resourceFolder then
-                for _, res in pairs(resourceFolder:GetChildren()) do
-                    if res:IsA("Model") and res:GetAttribute("EntityID") then
-                        local ppart = res.PrimaryPart or res:FindFirstChildWhichIsA("BasePart")
-                        if ppart then
-                            local dist = (ppart.Position - root.Position).Magnitude
-                            if dist <= State.ResourceRange then
-                                table.insert(targets, {
-                                    eid = res:GetAttribute("EntityID"),
-                                    dist = dist,
-                                })
+        local canSwing = os.clock() >= resourceAuraPauseUntil
+        if canSwing and State.ResourceRequireTool and not getEquippedTool() then
+            canSwing = false
+            task.wait(0.2)
+        elseif not canSwing then
+            task.wait(0.1)
+        end
+
+        if canSwing then
+            local root = getRoot()
+            if root then
+                local targets = {}
+                local resourceFolder = workspace:FindFirstChild("Resources")
+                if resourceFolder then
+                    for _, res in pairs(resourceFolder:GetChildren()) do
+                        if res:IsA("Model") and res:GetAttribute("EntityID") then
+                            local ppart = res.PrimaryPart or res:FindFirstChildWhichIsA("BasePart")
+                            if ppart then
+                                local dist = (ppart.Position - root.Position).Magnitude
+                                if dist <= State.ResourceRange then
+                                    table.insert(targets, {
+                                        eid = res:GetAttribute("EntityID"),
+                                        dist = dist,
+                                    })
+                                end
+                            end
+                        end
+                    end
+                end
+                if #targets > 0 then
+                    table.sort(targets, function(a, b)
+                        return a.dist < b.dist
+                    end)
+                    for i = 1, math.min(State.ResourceTargets, #targets) do
+                        pcall(function()
+                            Packets.SwingTool.send(targets[i].eid)
+                        end)
+                    end
+                end
+            end
+            task.wait(State.ResourceCooldown)
+        end
+    end
+end
+
+local function setupCharacter(char)
+    healHumanoid = char:WaitForChild("Humanoid")
+    cachedFruit = nil
+end
+
+if LocalPlayer.Character then
+    setupCharacter(LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(setupCharacter)
+
+task.spawn(function()
+    while task.wait() do
+        if State.AutoHealOn and healHumanoid and healHumanoid.Health > 0 then
+            local hp = (healHumanoid.Health / healHumanoid.MaxHealth) * 100
+            if hp <= State.HealPercent then
+                local now = os.clock()
+                if now - lastUseTime >= (1 / State.CpsSpeed) then
+                    local mainGui = LocalPlayer.PlayerGui:FindFirstChild("MainGui")
+                    if mainGui then
+                        local inventory = mainGui:FindFirstChild("RightPanel")
+                            and mainGui.RightPanel:FindFirstChild("Inventory")
+                            and mainGui.RightPanel.Inventory:FindFirstChild("List")
+                        if inventory then
+                            if not cachedFruit or not cachedFruit.Parent then
+                                cachedFruit = nil
+                                for _, item in ipairs(inventory:GetChildren()) do
+                                    if item:IsA("ImageLabel") and item.Name == State.SelectedFruit then
+                                        cachedFruit = item
+                                        break
+                                    end
+                                end
+                            end
+                            if cachedFruit then
+                                local success = pcall(function()
+                                    Packets.UseBagItem.send(cachedFruit.LayoutOrder)
+                                end)
+                                if success then
+                                    lastUseTime = os.clock()
+                                else
+                                    cachedFruit = nil
+                                end
                             end
                         end
                     end
                 end
             end
-            if #targets > 0 then
-                table.sort(targets, function(a, b)
-                    return a.dist < b.dist
-                end)
-                for i = 1, math.min(State.ResourceTargets, #targets) do
-                    pcall(function()
-                        Packets.SwingTool.send(targets[i].eid)
-                    end)
-                end
-            end
-        end
-        task.wait(State.ResourceCooldown)
-    end
-end
----
--- AUTO HEAL
----
-local healHumanoid = nil
-local cachedFruit = nil
-local lastUseTime = 0
-local function setupCharacter(char)
-    healHumanoid = char:WaitForChild("Humanoid")
-    cachedFruit = nil
-end
-if LocalPlayer.Character then
-    setupCharacter(LocalPlayer.Character)
-end
-LocalPlayer.CharacterAdded:Connect(setupCharacter)
-task.spawn(function()
-    while task.wait() do
-        if not State.AutoHealOn then
-            continue
-        end
-        if not healHumanoid or healHumanoid.Health <= 0 then
-            continue
-        end
-        local hp = (healHumanoid.Health / healHumanoid.MaxHealth) * 100
-        if hp > State.HealPercent then
-            continue
-        end
-        local now = os.clock()
-        if now - lastUseTime < (1 / State.CpsSpeed) then
-            continue
-        end
-        local mainGui = LocalPlayer.PlayerGui:FindFirstChild("MainGui")
-        if not mainGui then
-            continue
-        end
-        local inventory = mainGui:FindFirstChild("RightPanel")
-            and mainGui.RightPanel:FindFirstChild("Inventory")
-            and mainGui.RightPanel.Inventory:FindFirstChild("List")
-        if not inventory then
-            continue
-        end
-        if not cachedFruit or not cachedFruit.Parent then
-            cachedFruit = nil
-            for _, item in ipairs(inventory:GetChildren()) do
-                if item:IsA("ImageLabel") and item.Name == State.SelectedFruit then
-                    cachedFruit = item
-                    break
-                end
-            end
-        end
-        if cachedFruit then
-            local success = pcall(function()
-                Packets.UseBagItem.send(cachedFruit.LayoutOrder)
-            end)
-            if success then
-                lastUseTime = os.clock()
-            else
-                cachedFruit = nil
-            end
         end
     end
 end)
----
--- AUTOFARM
----
+
 local function autofarmLoop()
     while State.AutofarmOn do
         local root = getRoot()
@@ -459,6 +511,7 @@ local function autofarmLoop()
         task.wait(0.6)
     end
 end
+
 local function autoCollectLoop()
     while State.AutoCollectOn do
         local root = getRoot()
@@ -480,15 +533,14 @@ local function autoCollectLoop()
         task.wait(0.4)
     end
 end
----
--- RAYCAST PATHFINDING
----
+
 local RAY_DIST = 20
 local PROBE_ANGLE = 45
 local STEP_HEIGHT = 3.5
 local PROBE_COUNT = 7
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
 local function buildExclude()
     local list = {}
     for _, p in ipairs(Players:GetPlayers()) do
@@ -498,6 +550,7 @@ local function buildExclude()
     end
     return list
 end
+
 local function probeRay(origin, dir)
     rayParams.FilterDescendantsInstances = buildExclude()
     local result = workspace:Raycast(origin, dir * RAY_DIST, rayParams)
@@ -506,6 +559,7 @@ local function probeRay(origin, dir)
     end
     return RAY_DIST, nil, origin + dir * RAY_DIST
 end
+
 local function rotateY(vec, deg)
     local r = math.rad(deg)
     return Vector3.new(
@@ -514,10 +568,12 @@ local function rotateY(vec, deg)
         -vec.X * math.sin(r) + vec.Z * math.cos(r)
     )
 end
+
 local function flatDir(from, to)
     local d = Vector3.new(to.X - from.X, 0, to.Z - from.Z)
     return d.Magnitude > 0.01 and d.Unit or Vector3.new(0, 0, 1)
 end
+
 local function steer(rootPos, targetPos)
     local toTarget = flatDir(rootPos, targetPos)
     local origin = rootPos + Vector3.new(0, 1, 0)
@@ -554,6 +610,7 @@ local function steer(rootPos, targetPos)
     end
     return -toTarget, false, true
 end
+
 local function raycastPathfindLoop()
     while State.PathOn do
         local target = State.PathTarget and Players:FindFirstChild(State.PathTarget)
@@ -588,9 +645,7 @@ local function raycastPathfindLoop()
         h:MoveTo(r.Position)
     end
 end
----
--- ESP / VISUALS
----
+
 function clearESP(p)
     local h = State.ESPCache[p.Name]
     if h and h.Parent then
@@ -598,6 +653,7 @@ function clearESP(p)
     end
     State.ESPCache[p.Name] = nil
 end
+
 function clearAllESP()
     for _, h in pairs(State.ESPCache) do
         if h and h.Parent then
@@ -606,6 +662,7 @@ function clearAllESP()
     end
     State.ESPCache = {}
 end
+
 local function addESP(p)
     if p == LocalPlayer or not p.Character then
         return
@@ -624,6 +681,7 @@ local function addESP(p)
     h.Parent = p.Character
     State.ESPCache[p.Name] = h
 end
+
 function clearMobESP()
     for model, h in pairs(State.MobESPCache) do
         if h and h.Parent then
@@ -633,6 +691,7 @@ function clearMobESP()
     end
     State.MobESPCache = {}
 end
+
 local function espLoop()
     while State.ESPOn do
         for _, p in ipairs(Players:GetPlayers()) do
@@ -653,6 +712,7 @@ local function espLoop()
     end
     clearAllESP()
 end
+
 local function mobEspLoop()
     while State.MobESPOn do
         for _, obj in ipairs(workspace:GetDescendants()) do
@@ -682,6 +742,7 @@ local function mobEspLoop()
     end
     clearMobESP()
 end
+
 local function addNameTag(p)
     if p == LocalPlayer then
         return
@@ -740,6 +801,7 @@ local function addNameTag(p)
         hum:GetPropertyChangedSignal("Health"):Connect(upd)
     end
 end
+
 function clearAllTags()
     for _, p in ipairs(Players:GetPlayers()) do
         if p.Character then
@@ -753,6 +815,7 @@ function clearAllTags()
         end
     end
 end
+
 local function nameTagLoop()
     while State.TagsOn do
         for _, p in ipairs(Players:GetPlayers()) do
@@ -764,6 +827,7 @@ local function nameTagLoop()
     end
     clearAllTags()
 end
+
 function resetChams()
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
@@ -775,6 +839,7 @@ function resetChams()
         end
     end
 end
+
 local function chamsLoop()
     while State.ChamsOn do
         for _, p in ipairs(Players:GetPlayers()) do
@@ -790,10 +855,28 @@ local function chamsLoop()
     end
     resetChams()
 end
+
 Players.PlayerRemoving:Connect(clearESP)
----
--- FEATURE TOGGLES (shared by UI + keybinds)
----
+
+local function shutdownAll()
+    State.AutoHealOn = false
+    State.AutofarmOn = false
+    State.AutoCollectOn = false
+    State.PathOn = false
+    State.AutoPinchOn = false
+    State.KillAuraOn = false
+    State.ResourceAuraOn = false
+    State.ESPOn = false
+    State.MobESPOn = false
+    State.TagsOn = false
+    State.ChamsOn = false
+    cachedFruit = nil
+    clearAllESP()
+    clearMobESP()
+    clearAllTags()
+    resetChams()
+end
+
 local function toggleAutofarm(on)
     State.AutofarmOn = on
     setUiToggle("Autofarm", on)
@@ -802,12 +885,14 @@ local function toggleAutofarm(on)
     end
     notify("Autofarm [" .. keyName(Keybinds.Autofarm) .. "]", on and "Started!" or "Stopped.")
 end
+
 local function toggleAutoHeal(on)
     State.AutoHealOn = on
     cachedFruit = nil
     setUiToggle("AutoHeal", on)
     notify("Auto Heal [" .. keyName(Keybinds.AutoHeal) .. "]", on and "Active!" or "Stopped.")
 end
+
 local function togglePathfind(on)
     if on and not State.PathTarget then
         notify("Pathfinding", "Select a target first!")
@@ -822,6 +907,7 @@ local function togglePathfind(on)
         notify("Pathfinding", "Stopped.")
     end
 end
+
 local function toggleAutoPinch(on)
     if on and not State.PinchTarget then
         notify("Auto Pinch", "Select a target first!")
@@ -836,6 +922,7 @@ local function toggleAutoPinch(on)
         notify("Auto Pinch", "Stopped.")
     end
 end
+
 local function toggleKillAura(on)
     State.KillAuraOn = on
     setUiToggle("KillAura", on)
@@ -844,9 +931,7 @@ local function toggleKillAura(on)
     end
     notify("Kill Aura [" .. keyName(Keybinds.KillAura) .. "]", on and "Active!" or "Stopped.")
 end
----
--- WINDOW
----
+
 local Window = WindUI:CreateWindow({
     Title = "Cherry Blossom Hub",
     Folder = "BlossomUI",
@@ -865,10 +950,9 @@ local Window = WindUI:CreateWindow({
         BackgroundColor = Blossom.Pink,
     },
 })
+
 task.defer(bindHubGui)
----
--- KEYBIND LISTENER
----
+
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then
         return
@@ -893,15 +977,14 @@ UserInputService.InputBegan:Connect(function(input, gp)
         toggleKillAura(not State.KillAuraOn)
     end
 end)
----
--- SECTIONS
----
+
 local S_Main = Window:Section({ Title = "Main" })
 local S_Farm = Window:Section({ Title = "Farming" })
 local S_Combat = Window:Section({ Title = "Combat" })
 local S_Move = Window:Section({ Title = "Movement" })
 local S_Vis = Window:Section({ Title = "Visuals" })
 local S_Set = Window:Section({ Title = "Settings" })
+
 local function getPlayerList()
     local t = {}
     for _, p in ipairs(Players:GetPlayers()) do
@@ -911,9 +994,7 @@ local function getPlayerList()
     end
     return t
 end
----
--- HOME TAB
----
+
 local HomeTab = S_Main:Tab({ Title = "Home", Icon = "home", IconColor = Blossom.Pink })
 HomeTab:Paragraph({
     Title = "Cherry Blossom Hub",
@@ -931,9 +1012,7 @@ HomeTab:Button({
         notify("Cherry Blossom Hub", "Ready!", 4)
     end,
 })
----
--- AUTOFARM TAB
----
+
 local FarmTab = S_Farm:Tab({ Title = "Autofarm", Icon = "leaf", IconColor = Blossom.Green })
 FarmTab:Paragraph({
     Title = "Autofarm Info",
@@ -977,13 +1056,19 @@ FarmTab:Button({
         end
     end,
 })
----
--- RESOURCE AURA
----
+
 local ResTab = S_Farm:Tab({ Title = "Resource Aura", Icon = "pickaxe", IconColor = Blossom.Yellow })
 ResTab:Paragraph({
     Title = "Resource Aura Info",
-    Desc = "Swings at nearby resources using SwingTool EntityID packets.",
+    Desc = "Swings at nearby resources using SwingTool packets.\nPauses while equipping tools so god/normal tools still work.",
+})
+ResTab:Toggle({
+    Title = "Require Equipped Tool",
+    Value = true,
+    Callback = function(v)
+        State.ResourceRequireTool = v
+        notify("Resource Aura", v and "Needs equipped tool." or "Swing without tool.")
+    end,
 })
 UiToggles.ResourceAura = ResTab:Toggle({
     Title = "Enable Resource Aura",
@@ -1007,9 +1092,17 @@ ResTab:Slider({
 ResTab:Slider({
     Title = "Cooldown (s)",
     Step = 0.01,
-    Value = { Min = 0.01, Max = 1, Default = 0.1 },
+    Value = { Min = 0.05, Max = 1, Default = 0.25 },
     Callback = function(v)
         State.ResourceCooldown = v
+    end,
+})
+ResTab:Slider({
+    Title = "Equip Pause (s)",
+    Step = 0.1,
+    Value = { Min = 0.5, Max = 5, Default = 2 },
+    Callback = function(v)
+        State.ResourceEquipPause = v
     end,
 })
 ResTab:Slider({
@@ -1020,9 +1113,7 @@ ResTab:Slider({
         State.ResourceTargets = v
     end,
 })
----
--- AUTO HEAL TAB
----
+
 local HealTab = S_Combat:Tab({ Title = "Auto Heal", Icon = "heart", IconColor = Blossom.Red })
 HealTab:Paragraph({
     Title = "Auto Heal Info",
@@ -1101,9 +1192,7 @@ HealTab:Button({
         end
     end,
 })
----
--- KILL AURA TAB
----
+
 local KATab = S_Combat:Tab({ Title = "Kill Aura", Icon = "sword", IconColor = Blossom.Red })
 KATab:Paragraph({
     Title = "Kill Aura Info",
@@ -1140,9 +1229,7 @@ KATab:Slider({
         State.KillAuraTargets = v
     end,
 })
----
--- AUTO PINCH TAB
----
+
 local PinchTab = S_Combat:Tab({ Title = "Auto Pinch", Icon = "zap", IconColor = Blossom.Purple })
 PinchTab:Paragraph({
     Title = "Auto Pinch Info",
@@ -1189,9 +1276,7 @@ UiToggles.AutoPinch = PinchTab:Toggle({
         toggleAutoPinch(v)
     end,
 })
----
--- PATHFINDING TAB
----
+
 local PathTab = S_Move:Tab({ Title = "Pathfinding", Icon = "navigation", IconColor = Blossom.Blue })
 PathTab:Paragraph({
     Title = "Raycast Pathfinding",
@@ -1258,9 +1343,7 @@ PathTab:Button({
         end
     end,
 })
----
--- SPEED TAB
----
+
 local SpeedTab = S_Move:Tab({ Title = "Speed", Icon = "wind", IconColor = Blossom.Yellow })
 SpeedTab:Slider({
     Title = "Walk Speed",
@@ -1351,9 +1434,7 @@ SpeedTab:Button({
         notify("Speed", "All reset.")
     end,
 })
----
--- ESP TAB
----
+
 local EspTab = S_Vis:Tab({ Title = "ESP", Icon = "eye", IconColor = Blossom.Pink })
 EspTab:Paragraph({
     Title = "ESP Info",
@@ -1457,9 +1538,7 @@ EspTab:Button({
         notify("Visuals", "All cleared.")
     end,
 })
----
--- SETTINGS TAB
----
+
 local SetTab = S_Set:Tab({ Title = "Settings", Icon = "settings", IconColor = Blossom.Soft })
 SetTab:Paragraph({
     Title = "Keybinds",
@@ -1559,4 +1638,5 @@ SetTab:Button({
         Window:Destroy()
     end,
 })
+
 print("[Cherry Blossom Hub] Loaded.")
