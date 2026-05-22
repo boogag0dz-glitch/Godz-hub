@@ -1,5 +1,4 @@
 -- Cherry Blossom Hub | Booga Booga Reborn
--- v2: single loops, safe ESP, Packets wait, resource aura equip fix, no `continue`
 
 local WindUI = loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"
