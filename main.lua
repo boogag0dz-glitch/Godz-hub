@@ -4,6 +4,174 @@ local WindUI = loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"
 ))()
 -- Key system or i think 
+
+local HttpService = game:GetService("HttpService")
+
+local KeySystem = {
+    FileName = "CherryBlossomKey.json",
+    Discord = "https://discord.gg/aaJfDTFu",
+    Lootlabs = "https://lootdest.org/s?dFqzcoYK",
+    Linkvertise = "https://direct-link.net/5922287/O8ngvbuGlYXB",
+    KeysURL = "https://raw.githubusercontent.com/boogag0dz-glitch/Godz-hub/refs/heads/main/keys.txt",
+    ExpireHours = 24
+}
+
+local function randomKey()
+    local chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    local s = ""
+    for i = 1, 25 do
+        local r = math.random(1, #chars)
+        s = s .. chars:sub(r, r)
+    end
+    return s
+end
+
+local function saveKey(key)
+    if writefile then
+        local data = {
+            key = key,
+            time = os.time()
+        }
+        writefile(KeySystem.FileName, HttpService:JSONEncode(data))
+    end
+end
+
+local function loadKey()
+    if isfile and isfile(KeySystem.FileName) then
+        local success, data = pcall(function()
+            return HttpService:JSONDecode(readfile(KeySystem.FileName))
+        end)
+
+        if success and data.key and data.time then
+            if (os.time() - data.time) < (KeySystem.ExpireHours * 3600) then
+                return data.key
+            end
+        end
+    end
+
+    return nil
+end
+
+local function checkKey(key)
+    local success, response = pcall(function()
+        return game:HttpGet(KeySystem.KeysURL)
+    end)
+
+    if success and response then
+        return string.find(response, key) ~= nil
+    end
+
+    return false
+end
+
+local SavedKey = loadKey()
+
+if SavedKey and checkKey(SavedKey) then
+    WindUI:Notify({
+        Title = "Cherry Blossom",
+        Content = "Auto verified saved key",
+        Duration = 3
+    })
+else
+    local GeneratedKey = randomKey()
+
+    local Window = WindUI:CreateWindow({
+        Title = "Cherry Blossom Key System",
+        Folder = "CherryKeys",
+        Icon = "key",
+        Topbar = {
+            Height = 40,
+        },
+        Size = UDim2.fromOffset(520, 360),
+        Transparent = true,
+        Theme = "Dark"
+    })
+
+    local Tab = Window:Tab({
+        Title = "Verify",
+        Icon = "shield"
+    })
+
+    Tab:Paragraph({
+        Title = "Verification Required",
+        Desc = "Complete Linkvertise or Lootlabs then enter your key."
+    })
+
+    Tab:Button({
+        Title = "Get Key (Lootlabs)",
+        Callback = function()
+            setclipboard(KeySystem.Lootlabs)
+            WindUI:Notify({
+                Title = "Lootlabs",
+                Content = "Link copied to clipboard",
+                Duration = 3
+            })
+        end
+    })
+
+    Tab:Button({
+        Title = "Get Key (Linkvertise)",
+        Callback = function()
+            setclipboard(KeySystem.Linkvertise)
+            WindUI:Notify({
+                Title = "Linkvertise",
+                Content = "Link copied to clipboard",
+                Duration = 3
+            })
+        end
+    })
+
+    Tab:Button({
+        Title = "Join Discord",
+        Callback = function()
+            setclipboard(KeySystem.Discord)
+            WindUI:Notify({
+                Title = "Discord",
+                Content = "Invite copied to clipboard",
+                Duration = 3
+            })
+        end
+    })
+
+    local InputKey = ""
+
+    Tab:Input({
+        Title = "Enter Key",
+        Placeholder = "Paste your key here",
+        Callback = function(text)
+            InputKey = text
+        end
+    })
+
+    Tab:Button({
+        Title = "Verify Key",
+        Callback = function()
+            if checkKey(InputKey) then
+                saveKey(InputKey)
+
+                WindUI:Notify({
+                    Title = "Success",
+                    Content = "Key verified",
+                    Duration = 3
+                })
+
+                task.wait(1)
+
+                Window:Destroy()
+            else
+                WindUI:Notify({
+                    Title = "Invalid",
+                    Content = "Wrong key",
+                    Duration = 3
+                })
+            end
+        end
+    })
+
+    repeat
+        task.wait()
+    until loadKey()
+end
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService  = game:GetService("UserInputService")
