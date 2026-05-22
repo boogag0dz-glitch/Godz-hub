@@ -1,8 +1,14 @@
 -- Cherry Blossom Hub | Booga Booga Reborn
 
-local WindUI = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"
-))()
+local success, WindUI = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+end)
+
+if not success or not WindUI then
+    warn("WindUI failed to load:", WindUI)
+    return
+end
+
 -- Key system or i think 
 
 local HttpService = game:GetService("HttpService")
