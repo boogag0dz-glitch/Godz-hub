@@ -114,26 +114,7 @@ local function checkKey(inputKey)
     return false
 end
 
-    local url = KeySystem.KeysURL .. "?t=" .. tostring(os.time())
-
-    local success, response = pcall(function()
-        return game:HttpGet(url)
-    end)
-
-    if not success or not response then
-        return false
-    end
-
-      for line in response:gmatch("[^\r\n]+") do
-        local validKey = cleanKey(line)
-
-        if validKey ~= "" and inputKey == validKey then
-            return true
-        end
-    end
-
-    return false
-end
+    
 
 local SavedKey = loadKey()
 
@@ -228,11 +209,37 @@ Tab:Button({
     local InputKey = ""
 
     Tab:Input({
-        Title = "Enter Key",
-        Placeholder = "Paste your key here",
-        Callback = function(text)
-            InputKey = text
+    Title = "Enter Key",
+    Placeholder = "Paste your key here",
+    Callback = function(text)
+        InputKey = text
+    end
+})
+
+Tab:Button({
+    Title = "Verify Key",
+    Callback = function()
+
+        if checkKey(InputKey) then
+            saveKey(InputKey)
+            Verified = true
+
+            WindUI:Notify({
+                Title = "Success",
+                Content = "Key verified! Loading hub...",
+                Duration = 3
+            })
+
+            Window:Destroy()
+        else
+            WindUI:Notify({
+                Title = "Invalid",
+                Content = "Wrong key",
+                Duration = 3
+            })
         end
+    end
+})
     })
 if checkKey(InputKey) then
     saveKey(InputKey)
