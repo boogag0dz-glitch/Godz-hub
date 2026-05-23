@@ -121,13 +121,12 @@ local SavedKey = loadKey()
 if SavedKey and checkKey(SavedKey) then
     Verified = true
 
-  WindUI:Notify({
+    WindUI:Notify({
         Title = "Cherry Blossom",
         Content = "Auto verified saved key",
         Duration = 3
     })
 else
-
     local Window = WindUI:CreateWindow({
         Title = "Cherry Blossom Key System",
         Folder = "CherryKeys",
@@ -153,7 +152,10 @@ else
     Tab:Button({
         Title = "Get Key (Lootlabs)",
         Callback = function()
-            setclipboard(KeySystem.Lootlabs)
+            if setclipboard then
+                setclipboard(KeySystem.Lootlabs)
+            end
+
             WindUI:Notify({
                 Title = "Lootlabs",
                 Content = "Link copied to clipboard",
@@ -161,43 +163,47 @@ else
             })
         end
     })
-    
-Tab:Button({
-    Title = "Get Key (Linkvertise)",
-    Callback = function()
-        local links = KeySystem.KeyLinks
 
-        if not links or #links == 0 then
-            WindUI:Notify({
-                Title = "Error",
-                Content = "No key links found",
-                Duration = 3
-            })
-            return
+    Tab:Button({
+        Title = "Get Key (Linkvertise)",
+        Callback = function()
+            local links = KeySystem.KeyLinks
+
+            if not links or #links == 0 then
+                WindUI:Notify({
+                    Title = "Error",
+                    Content = "No key links found",
+                    Duration = 3
+                })
+                return
+            end
+
+            local randomLink = links[math.random(1, #links)]
+
+            if setclipboard then
+                setclipboard(randomLink)
+                WindUI:Notify({
+                    Title = "Linkvertise",
+                    Content = "Random key link copied to clipboard",
+                    Duration = 3
+                })
+            else
+                WindUI:Notify({
+                    Title = "Clipboard Error",
+                    Content = randomLink,
+                    Duration = 8
+                })
+            end
         end
+    })
 
-        local randomLink = links[math.random(1, #links)]
-
-        if setclipboard then
-            setclipboard(randomLink)
-            WindUI:Notify({
-                Title = "Linkvertise",
-                Content = "Random key link copied to clipboard",
-                Duration = 3
-            })
-        else
-            WindUI:Notify({
-                Title = "Clipboard Error",
-                Content = randomLink,
-                Duration = 8
-            })
-        end
-    end
-})
     Tab:Button({
         Title = "Join Discord",
         Callback = function()
-            setclipboard(KeySystem.Discord)
+            if setclipboard then
+                setclipboard(KeySystem.Discord)
+            end
+
             WindUI:Notify({
                 Title = "Discord",
                 Content = "Invite copied to clipboard",
@@ -209,50 +215,27 @@ Tab:Button({
     local InputKey = ""
 
     Tab:Input({
-    Title = "Enter Key",
-    Placeholder = "Paste your key here",
-    Callback = function(text)
-        InputKey = text
-    end
-})
-
-Tab:Button({
-    Title = "Verify Key",
-    Callback = function()
-
-        if checkKey(InputKey) then
-            saveKey(InputKey)
-            Verified = true
-
-            WindUI:Notify({
-                Title = "Success",
-                Content = "Key verified! Loading hub...",
-                Duration = 3
-            })
-
-            Window:Destroy()
-        else
-            WindUI:Notify({
-                Title = "Invalid",
-                Content = "Wrong key",
-                Duration = 3
-            })
+        Title = "Enter Key",
+        Placeholder = "Paste your key here",
+        Callback = function(text)
+            InputKey = text
         end
-    end
-})
-    })
-if checkKey(InputKey) then
-    saveKey(InputKey)
-
-    Verified = true
-
-    WindUI:Notify({
-        Title = "Success",
-        Content = "Key verified! Loading hub...",
-        Duration = 3
     })
 
-    Window:Destroy()
+    Tab:Button({
+        Title = "Verify Key",
+        Callback = function()
+            if checkKey(InputKey) then
+                saveKey(InputKey)
+                Verified = true
+
+                WindUI:Notify({
+                    Title = "Success",
+                    Content = "Key verified! Loading hub...",
+                    Duration = 3
+                })
+
+                Window:Destroy()
             else
                 WindUI:Notify({
                     Title = "Invalid",
@@ -263,10 +246,10 @@ if checkKey(InputKey) then
         end
     })
 
- repeat
-      task.wait()
-               until Verified
-end 
+    repeat
+        task.wait()
+    until Verified
+end
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService  = game:GetService("UserInputService")
