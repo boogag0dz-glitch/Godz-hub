@@ -73,10 +73,31 @@ end
 
 local function checkKey(inputKey)
     inputKey = cleanKey(inputKey)
-end
+
     if inputKey == "" then
         return false
     end
+
+    local url = KeySystem.KeysURL .. "?t=" .. tostring(os.time())
+
+    local success, response = pcall(function()
+       return game:HttpGet(url, true)
+    end)
+
+    if not success or not response then
+        return false
+    end
+
+    for line in response:gmatch("[^\r\n]+") do
+        local validKey = cleanKey(line)
+
+        if validKey ~= "" and inputKey == validKey then
+            return true
+        end
+    end
+
+    return false
+end
 
     local url = KeySystem.KeysURL .. "?t=" .. tostring(os.time())
 
@@ -104,7 +125,7 @@ local SavedKey = loadKey()
 if SavedKey and checkKey(SavedKey) then
     Verified = true
 
-    WindUI:Notify({sS
+  WindUI:Notify({
         Title = "Cherry Blossom",
         Content = "Auto verified saved key",
         Duration = 3
@@ -198,22 +219,18 @@ Tab:Button({
             InputKey = text
         end
     })
-
-    Tab:Button({
-        Title = "Verify Key",
-        Callback = function()
-           if checkKey(InputKey) then
+if checkKey(InputKey) then
     saveKey(InputKey)
+
     Verified = true
-                WindUI:Notify({
-                    Title = "Success",
-                    Content = "Key verified",
-                    Duration = 3
-                })
 
-                task.wait(1)
+    WindUI:Notify({
+        Title = "Success",
+        Content = "Key verified! Loading hub...",
+        Duration = 3
+    })
 
-                Window:Destroy()
+    Window:Destroy()
             else
                 WindUI:Notify({
                     Title = "Invalid",
