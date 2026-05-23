@@ -35,7 +35,6 @@ local KeySystem = {
 
     KeyLinks = {
         "https://link-hub.net/5922287/4cjB3yH9UKrl",
-        "https://direct-link.net/5922287/O8ngvbuGlYXB",
         "https://link-target.net/5922287/Ua3l85mHsUrX",
         "https://link-center.net/5922287/AoMhDFSEPbpg",
         "https://link-hub.net/5922287/cOxXb3ZcMgJg",
