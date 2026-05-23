@@ -1,13 +1,28 @@
 -- Cherry Blossom Hub | Booga Booga Reborn
 
-local success, WindUI = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+local ok, WindUI = pcall(function()
+
+    if not loadstring then
+        error("loadstring unavailable")
+    end
+
+    local source = game:HttpGet(
+        "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"
+    )
+
+    if not source or source == "" then
+        error("HttpGet returned empty response")
+    end
+
+    return loadstring(source)()
 end)
 
-if not success or not WindUI then
-    warn("WindUI failed to load:", WindUI)
+if not ok then
+    warn("[CherryHub] WindUI failed:", tostring(WindUI))
     return
 end
+
+print("[CherryHub] WindUI loaded.")
 
 -- Key system or i think 
 
