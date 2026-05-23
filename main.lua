@@ -249,6 +249,9 @@ else
         task.wait()
     until Verified
 end
+
+print("[CherryHub] Verified passed, loading main script...")
+
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService  = game:GetService("UserInputService")
