@@ -29,7 +29,7 @@ print("[CherryHub] WindUI loaded.")
 local HttpService = game:GetService("HttpService")
 
 local KeySystem = {
-    FileName = "CherryBlossomKey.json",
+   FileName = "CherryBlossomKeyV2.json",
     Discord = "https://discord.gg/aaJfDTFu",
     Lootlabs = "https://lootdest.org/s?dFqzcoYK",
 
