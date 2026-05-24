@@ -1,5 +1,5 @@
 -- Cherry Blossom Hub | Booga Booga Reborn
----
+
 
 local ok, WindUI = pcall(function()
     if not loadstring then error("loadstring unavailable") end
