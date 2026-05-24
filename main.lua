@@ -1,5 +1,5 @@
 -- Cherry Blossom Hub | Booga Booga Reborn
-
+---
 
 local ok, WindUI = pcall(function()
     if not loadstring then error("loadstring unavailable") end
@@ -282,9 +282,12 @@ local function isPlayerEntity(inst)
     return false
 end
 
--- 
--- KILL AURA
---
+-- ----------------------------------------
+-- KILL AURA - correct ByteNet swing format
+-- Uses the same approach as Herkle Hub:
+-- encodes entityID into a binary buffer and
+-- fires directly on ByteNetReliable remote
+-- ----------------------------------------
 local function swingencode(ids)
     if typeof(ids) ~= "table" then ids = {ids} end
     local count = #ids
@@ -391,9 +394,13 @@ local function swingOnTargets(targets, maxCount)
     if #ids > 0 then swingAtEntityIDs(ids) end
 end
 
--- 
--- AUTO PINCH 
---
+-- ----------------------------------------
+-- AUTO PINCH - targets OTHER players
+-- Three modes:
+--   Nearest  = closest player to you by distance
+--   Cursor   = player closest to screen center (crosshair)
+--   Selected = manually pick from dropdown
+-- ----------------------------------------
 local pinchParams = RaycastParams.new()
 pinchParams.FilterType = Enum.RaycastFilterType.Exclude
 
@@ -585,20 +592,7 @@ local function notify(title, msg, dur)
 end
 local function applySpeed()
     local h = getHum()
-    if not h then return end
-
-    h.WalkSpeed = State.Speed
-
-    pcall(function()
-        h.UseJumpPower = true
-        h.JumpPower = State.Jump
-    end)
-
-    pcall(function()
-        if not h.UseJumpPower then
-            h.JumpHeight = State.Jump / 4
-        end
-    end)
+    if h then h.WalkSpeed = State.Speed h.JumpPower = State.Jump end
 end
 local function setUiToggle(key, value)
     local el = UiToggles[key] if not el then return end
@@ -1227,104 +1221,50 @@ PathTab:Button({ Title="Teleport to Target", Icon="zap", Justify="Center", Color
 ---
 -- SPEED
 ---
-local SpeedTab = S_Move:Tab({
-    Title = "Speed",
-    Icon = "wind",
-    IconColor = Blossom.Yellow
-})
-
-task.spawn(function()
-    while task.wait(0.1) do
-        if State.SpeedLock then
-            applySpeed()
-        end
-    end
-end)
-
-SpeedTab:Slider({
-    Title="Walk Speed",
-    Desc="Default: 16 / Max: 100",
-    Step=1,
-    Value={Min=1,Max=100,Default=16},
-    Callback=function(v)
-        State.Speed=v
-        applySpeed()
-    end
-})
-
-SpeedTab:Slider({
-    Title="Jump Power",
-    Desc="Default: 50",
-    Step=1,
-    Value={Min=1,Max=300,Default=50},
-    Callback=function(v)
-        State.Jump=v
-        applySpeed()
-    end
-})
-
-SpeedTab:Toggle({
-    Title="Speed Lock",
-    Desc="Force reapplies every 0.1s.",
-    Value=true,
-    Callback=function(v)
-        State.SpeedLock=v
-        if v then applySpeed() end
-        notify("Speed Lock", v and "Enabled." or "Disabled.")
-    end
-})
-
+local SpeedTab = S_Move:Tab({ Title = "Speed", Icon = "wind", IconColor = Blossom.Yellow })
+SpeedTab:Slider({ Title="Walk Speed", Desc="Default: 16 / Max: 21", Step=1, Value={Min=1,Max=21,Default=16},
+    Callback=function(v) State.Speed=v local h=getHum() if h then h.WalkSpeed=v end end })
+SpeedTab:Slider({ Title="Jump Power", Desc="Default: 50", Step=1, Value={Min=1,Max=200,Default=50},
+    Callback=function(v) State.Jump=v local h=getHum() if h then h.JumpPower=v end end })
+SpeedTab:Toggle({ Title="Speed Lock", Desc="Re-applies speed after every respawn.", Value=false,
+    Callback=function(v) State.SpeedLock=v notify("Speed Lock",v and"Active."or"Disabled.") end })
 local PG = SpeedTab:Group({})
-
-PG:Button({
-    Title="Default",
-    Justify="Center",
-    Callback=function()
-        State.Speed=16
-        State.Jump=50
-        applySpeed()
-        notify("Speed","Reset.")
-    end
-})
-
+PG:Button({ Title="Default", Justify="Center", Icon="",
+    Callback=function() State.Speed=16 State.Jump=50 applySpeed() notify("Speed","Reset.") end })
 PG:Space()
-
-PG:Button({
-    Title="Max Speed",
-    Color=Blossom.Green,
-    Justify="Center",
-    Callback=function()
-        State.Speed=100
-        applySpeed()
-        notify("Speed","100.")
-    end
-})
-
+PG:Button({ Title="Max (21)", Color=Blossom.Green, Justify="Center", Icon="",
+    Callback=function() State.Speed=21 local h=getHum() if h then h.WalkSpeed=21 end notify("Speed","21.") end })
 PG:Space()
+PG:Button({ Title="High Jump", Color=Blossom.Blue, Justify="Center", Icon="",
+    Callback=function() State.Jump=120 local h=getHum() if h then h.JumpPower=120 end notify("Speed","Jump 120.") end })
+SpeedTab:Button({ Title="Reset All", Icon="refresh-cw", Color=Blossom.Red, Justify="Center",
+    Callback=function() State.Speed=16 State.Jump=50 applySpeed() notify("Speed","All reset.") end })
 
-PG:Button({
-    Title="High Jump",
-    Color=Blossom.Blue,
-    Justify="Center",
+---
+-- ESP
+---
+local EspTab = S_Vis:Tab({ Title = "ESP", Icon = "eye", IconColor = Blossom.Pink })
+EspTab:Paragraph({ Title = "ESP Info", Desc = "Player and mob highlights tracked separately.\nSome executors may block Highlight rendering." })
+UiToggles.ESP = EspTab:Toggle({ Title="Player ESP", Value=false,
+    Callback=function(v) State.ESPOn=v if v then startLoop("ESP",espLoop) else clearAllESP() end notify("ESP",v and"On!"or"Off.") end })
+EspTab:Colorpicker({ Title="Fill Color", Default=State.ESPFill,
+    Callback=function(c) State.ESPFill=c for _,h in pairs(State.ESPCache) do if h and h.Parent then h.FillColor=c end end end })
+EspTab:Colorpicker({ Title="Outline Color", Default=State.ESPOutline,
+    Callback=function(c) State.ESPOutline=c for _,h in pairs(State.ESPCache) do if h and h.Parent then h.OutlineColor=c end end end })
+UiToggles.MobESP = EspTab:Toggle({ Title="Mob ESP", Value=false,
+    Callback=function(v) State.MobESPOn=v if v then startLoop("MobESP",mobEspLoop) else clearMobESP() end notify("Mob ESP",v and"On!"or"Off.") end })
+UiToggles.Tags = EspTab:Toggle({ Title="Name Tags", Value=false,
+    Callback=function(v) State.TagsOn=v if v then startLoop("NameTags",nameTagLoop) else clearAllTags() end notify("Name Tags",v and"On!"or"Off.") end })
+UiToggles.Chams = EspTab:Toggle({ Title="Chams", Desc="Makes enemy parts 40% transparent.", Value=false,
+    Callback=function(v) State.ChamsOn=v if v then startLoop("Chams",chamsLoop) else resetChams() end notify("Chams",v and"On!"or"Off.") end })
+EspTab:Button({ Title="Clear All Visuals", Icon="trash", Color=Blossom.Red, Justify="Center",
     Callback=function()
-        State.Jump=150
-        applySpeed()
-        notify("Speed","Jump 150.")
-    end
-})
+        State.ESPOn=false State.MobESPOn=false State.TagsOn=false State.ChamsOn=false
+        setUiToggle("ESP",false) setUiToggle("MobESP",false) setUiToggle("Tags",false) setUiToggle("Chams",false)
+        clearAllESP() clearMobESP() clearAllTags() resetChams()
+        notify("Visuals","All cleared.")
+    end })
 
-SpeedTab:Button({
-    Title="Reset All",
-    Icon="refresh-cw",
-    Color=Blossom.Red,
-    Justify="Center",
-    Callback=function()
-        State.Speed=16
-        State.Jump=50
-        applySpeed()
-        notify("Speed","All reset.")
-    end
-})
 ---
 -- SETTINGS
 ---
