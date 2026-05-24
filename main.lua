@@ -282,12 +282,9 @@ local function isPlayerEntity(inst)
     return false
 end
 
--- ----------------------------------------
--- KILL AURA - correct ByteNet swing format
--- Uses the same approach as Herkle Hub:
--- encodes entityID into a binary buffer and
--- fires directly on ByteNetReliable remote
--- ----------------------------------------
+-- 
+-- KILL AURA
+--
 local function swingencode(ids)
     if typeof(ids) ~= "table" then ids = {ids} end
     local count = #ids
@@ -312,7 +309,6 @@ local function swingAtEntityIDs(idList)
     end)
     if ok1 then return end
 
-    -- Method 2: Packets.SwingTool with single ID fallback
     for _, id in ipairs(idList) do
         pcall(function() Packets.SwingTool.send(id) end)
     end
@@ -342,7 +338,7 @@ local function getPlayerSwingTargets(origin, maxRange)
             end
         end
     end
-    -- fallback: check character directly
+    
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local part = getEntityPart(player.Character)
@@ -394,13 +390,9 @@ local function swingOnTargets(targets, maxCount)
     if #ids > 0 then swingAtEntityIDs(ids) end
 end
 
--- ----------------------------------------
--- AUTO PINCH - targets OTHER players
--- Three modes:
---   Nearest  = closest player to you by distance
---   Cursor   = player closest to screen center (crosshair)
---   Selected = manually pick from dropdown
--- ----------------------------------------
+--
+-- AUTO PINCH
+--
 local pinchParams = RaycastParams.new()
 pinchParams.FilterType = Enum.RaycastFilterType.Exclude
 
@@ -457,7 +449,7 @@ local function doPinch(targetHRP, wallName)
     pinchParams.FilterDescendantsInstances = chars
 
     for _, v in pairs({2, -2}) do
-        -- Offset LEFT and RIGHT of the TARGET's position, not ours
+        
         local pos = targetHRP.Position + (targetHRP.CFrame.RightVector * v)
         local ray = workspace:Raycast(
             pos + Vector3.new(0, 8, 0),
