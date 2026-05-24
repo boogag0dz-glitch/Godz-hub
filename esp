@@ -282,12 +282,9 @@ local function isPlayerEntity(inst)
     return false
 end
 
--- ----------------------------------------
--- KILL AURA - correct ByteNet swing format
--- Uses the same approach as Herkle Hub:
--- encodes entityID into a binary buffer and
--- fires directly on ByteNetReliable remote
--- ----------------------------------------
+-- 
+-- KILL AURA
+--
 local function swingencode(ids)
     if typeof(ids) ~= "table" then ids = {ids} end
     local count = #ids
