@@ -282,9 +282,12 @@ local function isPlayerEntity(inst)
     return false
 end
 
--- 
--- KILL AURA
---
+-- ----------------------------------------
+-- KILL AURA - correct ByteNet swing format
+-- Uses the same approach as Herkle Hub:
+-- encodes entityID into a binary buffer and
+-- fires directly on ByteNetReliable remote
+-- ----------------------------------------
 local function swingencode(ids)
     if typeof(ids) ~= "table" then ids = {ids} end
     local count = #ids
@@ -309,6 +312,7 @@ local function swingAtEntityIDs(idList)
     end)
     if ok1 then return end
 
+    -- Method 2: Packets.SwingTool with single ID fallback
     for _, id in ipairs(idList) do
         pcall(function() Packets.SwingTool.send(id) end)
     end
@@ -338,7 +342,7 @@ local function getPlayerSwingTargets(origin, maxRange)
             end
         end
     end
-    
+    -- fallback: check character directly
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local part = getEntityPart(player.Character)
@@ -390,11 +394,15 @@ local function swingOnTargets(targets, maxCount)
     if #ids > 0 then swingAtEntityIDs(ids) end
 end
 
---
--- AUTO PINCH
---
+-- ----------------------------------------
+-- AUTO PINCH - targets OTHER players
+-- Three modes:
+--   Nearest  = closest player to you by distance
+--   Cursor   = player closest to screen center (crosshair)
+--   Selected = manually pick from dropdown
+-- ----------------------------------------
 local pinchParams = RaycastParams.new()
-pinchParams.FilterType = Enum.RaycastFilterType.Exclude
+pinchParams.FilterType = Enum.RaycastFilterType.Blacklist
 
 local function getPinchTarget()
     local myRoot = getRoot()
@@ -442,14 +450,13 @@ local function getPinchTarget()
 end
 
 local function doPinch(targetHRP, wallName)
-    local chars = {}
-    for _, p in pairs(Players:GetPlayers()) do
-        if p.Character then table.insert(chars, p.Character) end
-    end
-    pinchParams.FilterDescendantsInstances = chars
+    -- Filter only the target's character so raycast hits ground under them
+    -- Same logic as the working pinch code: FilterDescendantsInstances = {char}
+    local targetChar = targetHRP.Parent
+    pinchParams.FilterDescendantsInstances = targetChar and {targetChar} or {}
 
     for _, v in pairs({2, -2}) do
-        
+        -- Offset left and right of TARGET's position using THEIR RightVector
         local pos = targetHRP.Position + (targetHRP.CFrame.RightVector * v)
         local ray = workspace:Raycast(
             pos + Vector3.new(0, 8, 0),
@@ -464,7 +471,7 @@ local function doPinch(targetHRP, wallName)
                 })
             end)
         end
-        task.wait(0.1)
+        task.wait(0.2)
     end
 end
 
@@ -1148,10 +1155,6 @@ HealTab:Button({ Title="Heal Now", Icon="heart", Justify="Center", Color=Blossom
 -- KILL AURA
 ---
 local KATab = S_Combat:Tab({ Title = "Kill Aura", Icon = "sword", IconColor = Blossom.Red })
-KATab:Paragraph({
-    Title = "Kill Aura Info",
-    Desc  = "Hits nearby players using raw ByteNet swing packet (no animation).\nSame method as Herkle Hub.\nDefault hotkey: F5",
-})
 UiToggles.KillAura = KATab:Toggle({ Title="Enable Kill Aura", Value=false, Callback=function(v) toggleKillAura(v) end })
 KATab:Slider({ Title="Range (studs)", Step=1, Value={Min=1,Max=30,Default=15}, Callback=function(v) State.KillAuraRange=v end })
 KATab:Slider({ Title="Attack Cooldown (s)", Step=0.01, Value={Min=0.01,Max=1,Default=0.1}, Callback=function(v) State.KillAuraCooldown=v end })
