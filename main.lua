@@ -1,5 +1,4 @@
 -- Cherry Blossom Hub | Booga Booga Reborn
--- Removed: Autofarm, Pathfinding, Mob ESP
 
 local ok, WindUI = pcall(function()
     if not loadstring then error("loadstring unavailable") end
